@@ -70,7 +70,7 @@ class MapPLZ
     # prepare where clause for parse
     where_clause.downcase! unless where_clause.blank?
     where_clause = where_clause.gsub('?', '\'?\'') if add_on.present?
-    where_clause = 'select * from bogus_table ' + where_clause
+    where_clause = 'select * from bogus_table where ' + where_clause
 
     # parse where conditions
     conditions = @parser.parse(where_clause).tree[:conditions]

@@ -16,16 +16,16 @@ describe 'store objects' do
   end
 
   it 'should return a count of matching objects' do
-    @mapstore.count('WHERE lat < 2').should eq(1)
+    @mapstore.count('lat < 2').should eq(1)
 
     # params pass
-    @mapstore.count('WHERE lat < ?', 2).should eq(1)
-    @mapstore.size('WHERE lat < ?', 2).should eq(1)
+    @mapstore.count('lat < ?', 2).should eq(1)
+    @mapstore.size('lat < ?', 2).should eq(1)
   end
 
   it 'supports >, <, and =' do
-    @mapstore.count('WHERE lat < 2').should eq(1)
-    @mapstore.count('WHERE lat > 3').should eq(0)
-    @mapstore.count('WHERE lng = 4').should eq(1)
+    @mapstore.count('lat < 2').should eq(1)
+    @mapstore.count('lat > 3').should eq(0)
+    @mapstore.count('lng = 4').should eq(1)
   end
 end

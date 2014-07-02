@@ -38,18 +38,34 @@ databases, using a simplified MapPLZ API.
 All of these are valid ways to store geodata:
 
 ```
-# a point
-mapplz.data << [lat, lng]
-# a line
-mapplz.data << [[point1, point2, point3]]
+mapstore = MapPLZ.new
 
-# a point with some data
-pt = mapplz.data << [lat, lng]
-pt.name = "Sears Tower"
-pt.save!
+# a point
+mapstore << [lat, lng]
+
+# a line
+mapstore << [[point1, point2, point3]]
 
 # GeoJSON string or object
-mapplz.data << geojson_data
+mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
+```
+
+Different ways to add properties to geo data:
+
+```
+# a single attribute
+pt = mapstore << [lat, lng, color, cost]
+> pt.properties = [color, cost]
+
+### COMING SOON
+
+# a hash or JSON string of attributes
+mapstore << [lat, lng, { color: 'red', cost: 10 }]
+
+# working with records
+pt = mapstore << [lat, lng]
+pt.name = "Sears Tower"
+pt.save!
 ```
 
 All of these are valid ways to query geodata:
@@ -57,6 +73,12 @@ All of these are valid ways to query geodata:
 ```
 # with a value
 mapplz.where('layer = ?', name_of_layer)
+
+# get a count
+mapplz.count
+mapplz.count('layer = ?', name_of_layer)
+
+### COMING SOON
 
 # near a point
 mapplz.near([lat, lng])

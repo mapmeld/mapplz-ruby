@@ -7,22 +7,28 @@ your favorite language.
 You can make a map super quickly by using the MapPLZ language. A MapPLZ map
 can be described using as simply as this:
 
-```map
+```
+map
   marker
     "The Statue of Liberty"
     @ "Statue of Liberty, NYC"
   plz
-plz```
+plz
+```
 
 You can then output an interactive, HTML + JavaScript map:
 
-```require mapplz
-mapplz.render_html(mapplz_code)```
+```
+require mapplz
+mapplz.render_html(mapplz_code)
+```
 
 You can use it in Rails + HAML, too:
 
-```div#map
-  = mapplz.render_html(@mapplz_code)```
+```
+div#map
+  = mapplz.render_html(@mapplz_code)
+```
 
 ## MapPLZ and Databases
 
@@ -31,7 +37,8 @@ databases, using a simplified MapPLZ API.
 
 All of these are valid ways to store geodata:
 
-```# a point
+```
+# a point
 mapplz.data << [lat, lng]
 # a line
 mapplz.data << [[point1, point2, point3]]
@@ -42,7 +49,8 @@ pt.name = "Sears Tower"
 pt.save!
 
 # GeoJSON string or object
-mapplz.data << geojson_data```
+mapplz.data << geojson_data
+```
 
 All of these are valid ways to query geodata:
 

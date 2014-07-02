@@ -1,0 +1,5 @@
+Style/MethodLength:
+  Max: 100
+
+CyclomaticComplexity:
+  Max: 50

@@ -48,6 +48,18 @@ class MapPLZ
     end
   end
 
+  def code(mapplz_code)
+    @code_lines = mapplz_code.gsub("\r", "").split("\n")
+    @code_level = 'toplevel'
+    @buttonLayers = []
+    @code_button = 0
+    @code_layers = []
+    @code_label = ''
+    @code_color = nil
+    code_line(0)
+    return @code_layers
+  end
+
   # alias methods
 
   # aliases for count
@@ -61,11 +73,139 @@ class MapPLZ
 
   private
 
+  def code_line(index)
+    return if index >= @code_lines.length
+    line = @code_lines[index].strip
+    codeline = line.downcase.split(' ')
+
+    if @code_level == 'toplevel'
+      if line.index('map')
+        @code_level = 'map'
+      end
+      return code_line(index + 1)
+
+    elsif @code_level == 'map' || @code_level == 'button'
+      if codeline.index('button') || codeline.index('btn')
+        @code_level = 'button'
+        @buttonLayers << { layers: [] }
+        @code_button = @buttonLayers.length
+      end
+
+      if codeline.index('marker')
+        @code_level = 'marker'
+        @code_latlngs = []
+        return code_line(index + 1)
+      elsif codeline.index('line')
+        @code_level = 'line'
+        @code_latlngs = []
+        return code_line(index + 1)
+      elsif codeline.index('shape')
+        @code_level = 'shape'
+        @code_latlngs = []
+        return code_line(index + 1)
+      end
+
+      if codeline.index('plz') || codeline.index('please')
+        if @code_level == 'map'
+          @code_level = 'toplevel'
+          return
+        elsif @code_level == 'button'
+          # add button
+          @code_level = 'map'
+          @code_button = nil
+          return code_line(index + 1)
+        end
+      end
+
+    elsif @code_level == 'marker' || @code_level == 'line' || @code_level == 'shape'
+      if codeline.index('plz') || codeline.index('please')
+
+        if @code_level == 'marker'
+          @code_layers << {
+            lat: @code_latlngs[0][0],
+            lng: @code_latlngs[0][1],
+            label: @code_label || ''
+          }
+        elsif @code_level == 'line'
+          @code_layers << {
+            path: @code_latlngs,
+            strokeColor: (@code_color || ''),
+            label: @code_label || ''
+          }
+        elsif @code_level == 'shape'
+          @code_layers << {
+            paths: @code_latlngs,
+            strokeColor: (@code_color || ''),
+            fillColor: (@code_color || ''),
+            label: @code_label || ''
+          }
+        end
+
+        if @code_button
+          @code_level = 'button'
+        else
+          @code_level = 'map'
+        end
+
+        @code_latlngs = []
+        return code_line(index + 1)
+      end
+
+    end
+
+    # geocoding starts with @
+
+    # reading a color
+    if codeline[0].index('#') == 0
+      @code_color = codeline[0]
+      if @code_color.length != 4 && @code_color.length != 7
+        # named color
+        @code_color = @code_color.gsub('#','')
+      end
+
+      if @code_level == 'button'
+        # button color
+      end
+
+      return codeline(index + 1)
+    end
+
+    # reading a raw string (probably text for a popup)
+    if codeline[0].index('"') == 0
+      # check button
+      @code_label = line[(line.index('"') + 1)..line.length]
+      @code_label = @code_label[0..(@code_label.index('"')-1)]
+    end
+
+    # reading a latlng coordinate
+    if line.index('[') && line.index(',') && line.index(']')
+      sign = 1.0
+      latlng = [ ]
+      latlng_line = line.gsub('[','').gsub(']','').split(',').map! { |num| num.to_f }
+
+      if latlng_line.length != 2
+        return codeline(index + 1)
+      end
+
+      @code_latlngs << latlng_line
+
+      return code_line(index + 1)
+    end
+
+    return code_line(index + 1)
+
+  end
+
   def standardize_geo(user_geo)
     geo_objects = []
 
     if user_geo.is_a?(String)
-      user_geo = JSON.parse(user_geo)
+      begin
+        user_geo = JSON.parse(user_geo)
+      rescue
+        # not JSON string - attempt mapplz parse
+        return code(user_geo)
+      end
     end
 
     if user_geo.is_a?(Array) && user_geo.length > 0

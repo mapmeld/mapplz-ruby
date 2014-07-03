@@ -105,3 +105,23 @@ describe 'count and filter objects' do
     @mapstore.count('lng = 4').should eq(1)
   end
 end
+
+describe 'custom MapPLZ language' do
+  before(:each) do
+    @mapstore = MapPLZ.new
+  end
+
+  it 'stores a lat lng point' do
+    lang = '''map
+      marker
+        "The Statue of Liberty"
+        [40, -70]
+      plz
+    plz'''
+    pt = @mapstore << lang
+
+    pt[:lat].should eq(40)
+    pt[:lng].should eq(-70)
+    pt[:label].should eq('The Statue of Liberty')
+  end
+end

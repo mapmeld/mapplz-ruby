@@ -19,7 +19,7 @@ plz
 You can then output an interactive, HTML + JavaScript map:
 
 ```
-require mapplz
+require 'mapplz'
 mapplz.render_html(mapplz_code)
 ```
 
@@ -53,11 +53,10 @@ mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat
 Different ways to add properties to geo data:
 
 ```
-# a single attribute
-pt = mapstore << [lat, lng, color, cost]
-> pt.properties = [color, cost]
-
-### COMING SOON
+# an array of attributes
+pt1 = mapstore << [lat, lng, color, cost]
+pt2 = mapstore << [lat, lng, color2, cost2]
+# pt1.properties = [color, cost]
 
 # a hash or JSON string of attributes
 mapstore << [lat, lng, { color: 'red', cost: 10 }]

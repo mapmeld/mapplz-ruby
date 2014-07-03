@@ -11,23 +11,34 @@ can be described using as simply as this:
 map
   marker
     "The Statue of Liberty"
-    @ "Statue of Liberty, NYC"
+    [40, -70]
   plz
 plz
 ```
 
-You can then output an interactive, HTML + JavaScript map:
+You can then output an interactive, HTML+JavaScript map using Leaflet.js
 
 ```
 require 'mapplz'
-mapplz.render_html(mapplz_code)
+
+@mapper = MapPLZ.new
+@mapper << mapplz_code
+@mapper.render_html
 ```
 
 You can use it in Rails + HAML, too:
 
 ```
 div#map
-  = mapplz.render_html(@mapplz_code)
+  = @mapper.embed_html
+```
+
+You can also output the data as GeoJSON:
+
+```
+@mapper = MapPLZ.new
+@mapper << mapplz_code
+@mapper.to_geojson
 ```
 
 ## MapPLZ and Databases

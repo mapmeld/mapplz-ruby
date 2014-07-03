@@ -60,6 +60,17 @@ class MapPLZ
     return @code_layers
   end
 
+  def to_geojson
+    feature_list = []
+    if @db_type == 'array'
+      @my_array.each do |feature|
+        feature_list << as_geojson(feature)
+      end
+    end
+    geojson = { type: 'FeatureCollection', features: feature_list }
+    geojson.to_json
+  end
+
   # alias methods
 
   # aliases for count
@@ -320,6 +331,28 @@ class MapPLZ
     end
 
     geo_objects
+  end
+
+  def as_geojson(geo_object)
+    property_list = geo_object.clone
+    property_list.delete(:lat)
+    property_list.delete(:lng)
+    if geo_object.key?(:properties)
+      property_list = geo_object[:properties]
+    end
+    if geo_object.key?(:lat) && geo_object.key?(:lng)
+      # point
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [geo_object[:lng], geo_object[:lat]]
+        },
+        properties: property_list
+      }
+    else
+      # other geometry
+    end
   end
 
   def query_array(where_clause, add_on = nil)

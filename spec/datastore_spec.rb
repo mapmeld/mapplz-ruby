@@ -106,6 +106,34 @@ describe 'count and filter objects' do
   end
 end
 
+describe 'export GeoJSON' do
+  before(:each) do
+    @mapstore = MapPLZ.new
+    @mapstore << [1, 2]
+    @mapstore << [3, 4]
+  end
+
+  it 'outputs as a FeatureCollection' do
+    gj = JSON.parse(@mapstore.to_geojson)
+    gj['type'].should == 'FeatureCollection'
+    gj['features'].length.should eq(2)
+    first_pt = gj['features'][0]
+    # lng, lat order
+    first_pt['geometry']['coordinates'].should == [2, 1]
+  end
+
+  it 'includes properties in GeoJSON' do
+    @mapstore << [1, 2, { data: 'byte', number: 1 }]
+    gj = JSON.parse(@mapstore.to_geojson)
+
+    gj['features'].length.should eq(3)
+    data_pt = gj['features'][2]
+    data_pt['properties']['data'].should == 'byte'
+    data_pt['properties']['number'].should == 1
+    data_pt['properties'].key?('lat').should == false
+  end
+end
+
 describe 'custom MapPLZ language' do
   before(:each) do
     @mapstore = MapPLZ.new

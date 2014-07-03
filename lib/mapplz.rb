@@ -63,9 +63,14 @@ class MapPLZ
 
   def standardize_geo(user_geo)
     geo_objects = []
+
+    if user_geo.is_a?(String)
+      user_geo = JSON.parse(user_geo)
+    end
+
     if user_geo.is_a?(Array) && user_geo.length > 0
       # multiple objects being added? iterate through
-      if user_geo[0].is_a?(Hash)
+      if user_geo[0].is_a?(Hash) || user_geo[0].is_a?(Array)
         user_geo.each do |geo_piece|
           geo_objects += standardize_geo(geo_piece)
         end
@@ -113,7 +118,6 @@ class MapPLZ
 
       if validate_lat && validate_lng
         # single hash
-        user_geo = json_ready(user_geo)
         geo_object = {
           lat: user_geo[validate_lat].to_f,
           lng: user_geo[validate_lng].to_f
@@ -125,8 +129,53 @@ class MapPLZ
         geo_objects << geo_object
       else
         # try GeoJSON
-        user_geo = json_ready(user_geo)
+        if user_geo.key?('type')
+          if user_geo['type'] == 'FeatureCollection' && user_geo.key?('features')
+            # recursive onto features
+            user_geo['features'].each do |feature|
+              geo_objects += standardize_geo(feature)
+            end
+          elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
+            # individual feature
+            geo_object = {}
+            coordinates = user_geo['geometry']['coordinates']
+            if user_geo.key?('properties')
+              user_geo['properties'].keys.each do |key|
+                geo_object[key.to_sym] = user_geo['properties'][key]
+              end
+            end
 
+            if user_geo['geometry']['type'] == 'Point'
+              geo_object[:lat] = coordinates[1].to_f
+              geo_object[:lng] = coordinates[0].to_f
+            end
+
+            geo_objects << geo_object
+          end
+        elsif user_geo.key?(:type)
+          if user_geo[:type] == 'FeatureCollection' && user_geo.key?(:features)
+            # recursive onto features
+            user_geo[:features].each do |feature|
+              geo_objects += standardize_geo(feature)
+            end
+          elsif user_geo.key?(:geometry) && user_geo[:geometry].key?(:coordinates)
+            # individual feature
+            geo_object = {}
+            coordinates = user_geo[:geometry][:coordinates]
+            if user_geo.key?(:properties)
+              user_geo[:properties].keys.each do |key|
+                geo_object[key.to_sym] = user_geo[:properties][key]
+              end
+            end
+
+            if user_geo[:geometry][:type] == 'Point'
+              geo_object[:lat] = coordinates[1].to_f
+              geo_object[:lng] = coordinates[0].to_f
+            end
+
+            geo_objects << geo_object
+          end
+        end
       end
     end
 
@@ -172,9 +221,5 @@ class MapPLZ
       end
       is_valid
     end
-  end
-
-  def json_ready(ruby_obj)
-    JSON.parse(ruby_obj.to_json)
   end
 end

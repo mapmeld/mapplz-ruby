@@ -51,6 +51,31 @@ describe 'store objects' do
     pt[:a].should eq(3)
     pt[:b].should eq(4)
   end
+
+  it 'stores multiple points' do
+    pts = @mapstore << [[1, 2], [2, 3], [4, 5]]
+    pts[0][:lat].should eq(1)
+    pts[1][:lat].should eq(2)
+    pts[2][:lat].should eq(4)
+  end
+
+  it 'stores a GeoJSON string point' do
+    pt = @mapstore << '{ "type": "Feature", "geometry": { "type": "Point", "coordinates": [2, 1] } }'
+    pt[:lat].should eq(1)
+    pt[:lng].should eq(2)
+  end
+
+  it 'stores a GeoJSON hash point' do
+    pt = @mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [2, 1] } }
+    pt[:lat].should eq(1)
+    pt[:lng].should eq(2)
+  end
+
+  it 'stores a GeoJSON hash point' do
+    pt = @mapstore << { :type => "Feature", :geometry => { :type => "Point", :coordinates => [2, 1] } }
+    pt[:lat].should eq(1)
+    pt[:lng].should eq(2)
+  end
 end
 
 describe 'count and filter objects' do

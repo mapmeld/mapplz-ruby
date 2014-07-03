@@ -1,5 +1,14 @@
+Style/ClassLength:
+  Max: 1000
+
 Style/MethodLength:
   Max: 100
 
+Style/LineLength:
+  Max: 150
+
 CyclomaticComplexity:
   Max: 50
+
+BlockNesting:
+  Max: 5

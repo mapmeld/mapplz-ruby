@@ -14,10 +14,10 @@ describe 'store objects' do
   end
 
   it 'stores additional values as an array of properties' do
-    pt = @mapstore << [1, 2, 3, 4]
+    pt = @mapstore.add([1, 2, 3, 4])
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
-    pt[:properties].should == [3, 4]
+    pt[:properties].should eq([3, 4])
   end
 
   it 'accepts a hash of properties' do
@@ -28,24 +28,8 @@ describe 'store objects' do
     pt[:b].should eq(2)
   end
 
-  it 'accepts a hash of properties with symbols' do
-    pt = @mapstore << [1, 2, { :a => 1, :b => 2 }]
-    pt[:lat].should eq(1)
-    pt[:lng].should eq(2)
-    pt[:a].should eq(1)
-    pt[:b].should eq(2)
-  end
-
   it 'stores a hash' do
     pt = @mapstore << { lat: 1, lng: 2, a: 3, b: 4 }
-    pt[:lat].should eq(1)
-    pt[:lng].should eq(2)
-    pt[:a].should eq(3)
-    pt[:b].should eq(4)
-  end
-
-  it 'stores a hash with symbols' do
-    pt = @mapstore << { :lat => 1, :lng => 2, :a => 3, :b => 4 }
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
     pt[:a].should eq(3)
@@ -66,13 +50,7 @@ describe 'store objects' do
   end
 
   it 'stores a GeoJSON hash point' do
-    pt = @mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [2, 1] } }
-    pt[:lat].should eq(1)
-    pt[:lng].should eq(2)
-  end
-
-  it 'stores a GeoJSON hash point' do
-    pt = @mapstore << { :type => "Feature", :geometry => { :type => "Point", :coordinates => [2, 1] } }
+    pt = @mapstore << { type: 'Feature', geometry: { type: 'Point', coordinates: [2, 1] } }
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
   end
@@ -115,11 +93,11 @@ describe 'export GeoJSON' do
 
   it 'outputs as a FeatureCollection' do
     gj = JSON.parse(@mapstore.to_geojson)
-    gj['type'].should == 'FeatureCollection'
+    gj['type'].should eq('FeatureCollection')
     gj['features'].length.should eq(2)
     first_pt = gj['features'][0]
     # lng, lat order
-    first_pt['geometry']['coordinates'].should == [2, 1]
+    first_pt['geometry']['coordinates'].should eq([2, 1])
   end
 
   it 'includes properties in GeoJSON' do
@@ -128,9 +106,9 @@ describe 'export GeoJSON' do
 
     gj['features'].length.should eq(3)
     data_pt = gj['features'][2]
-    data_pt['properties']['data'].should == 'byte'
-    data_pt['properties']['number'].should == 1
-    data_pt['properties'].key?('lat').should == false
+    data_pt['properties']['data'].should eq('byte')
+    data_pt['properties']['number'].should eq(1)
+    data_pt['properties'].key?('lat').should eq(false)
   end
 end
 

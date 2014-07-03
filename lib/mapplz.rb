@@ -11,7 +11,7 @@ class MapPLZ
     @my_array = []
   end
 
-  def <<(user_geo)
+  def add(user_geo)
     geo_objects = standardize_geo(user_geo)
     @my_array += geo_objects
 
@@ -49,15 +49,15 @@ class MapPLZ
   end
 
   def code(mapplz_code)
-    @code_lines = mapplz_code.gsub("\r", "").split("\n")
+    @code_lines = mapplz_code.gsub("\r", '').split("\n")
     @code_level = 'toplevel'
-    @buttonLayers = []
+    @button_layers = []
     @code_button = 0
     @code_layers = []
     @code_label = ''
     @code_color = nil
     code_line(0)
-    return @code_layers
+    @code_layers
   end
 
   def to_geojson
@@ -72,6 +72,15 @@ class MapPLZ
   end
 
   # alias methods
+
+  # aliases for add
+  def <<(user_geo)
+    add(user_geo)
+  end
+
+  def push(user_geo)
+    add(user_geo)
+  end
 
   # aliases for count
   def size(where_clause = nil, add_on = nil)
@@ -90,16 +99,14 @@ class MapPLZ
     codeline = line.downcase.split(' ')
 
     if @code_level == 'toplevel'
-      if line.index('map')
-        @code_level = 'map'
-      end
+      @code_level = 'map' if line.index('map')
       return code_line(index + 1)
 
     elsif @code_level == 'map' || @code_level == 'button'
       if codeline.index('button') || codeline.index('btn')
         @code_level = 'button'
-        @buttonLayers << { layers: [] }
-        @code_button = @buttonLayers.length
+        @button_layers << { layers: [] }
+        @code_button = @button_layers.length
       end
 
       if codeline.index('marker')
@@ -171,7 +178,7 @@ class MapPLZ
       @code_color = codeline[0]
       if @code_color.length != 4 && @code_color.length != 7
         # named color
-        @code_color = @code_color.gsub('#','')
+        @code_color = @code_color.gsub('#', '')
       end
 
       if @code_level == 'button'
@@ -185,26 +192,22 @@ class MapPLZ
     if codeline[0].index('"') == 0
       # check button
       @code_label = line[(line.index('"') + 1)..line.length]
-      @code_label = @code_label[0..(@code_label.index('"')-1)]
+      @code_label = @code_label[0..(@code_label.index('"') - 1)]
     end
 
     # reading a latlng coordinate
     if line.index('[') && line.index(',') && line.index(']')
-      sign = 1.0
-      latlng = [ ]
-      latlng_line = line.gsub('[','').gsub(']','').split(',').map! { |num| num.to_f }
+      latlng_line = line.gsub('[', '').gsub(']', '').split(',').map! { |num| num.to_f }
 
-      if latlng_line.length != 2
-        return codeline(index + 1)
-      end
+      # must be a 2D coordinate
+      return codeline(index + 1) if latlng_line.length != 2
 
       @code_latlngs << latlng_line
 
       return code_line(index + 1)
     end
 
-    return code_line(index + 1)
-
+    code_line(index + 1)
   end
 
   def standardize_geo(user_geo)
@@ -334,25 +337,34 @@ class MapPLZ
   end
 
   def as_geojson(geo_object)
-    property_list = geo_object.clone
-    property_list.delete(:lat)
-    property_list.delete(:lng)
     if geo_object.key?(:properties)
       property_list = geo_object[:properties]
+    else
+      property_list = geo_object.clone
+      property_list.delete(:lat)
+      property_list.delete(:lng)
+      property_list.delete(:path)
     end
+
+    output_geo = {
+      type: 'Feature',
+      properties: property_list
+    }
+
     if geo_object.key?(:lat) && geo_object.key?(:lng)
       # point
-      {
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: [geo_object[:lng], geo_object[:lat]]
-        },
-        properties: property_list
+      output_geo[:geometry] = {
+        type: 'Point',
+        coordinates: [geo_object[:lng], geo_object[:lat]]
       }
     else
       # other geometry
+      output_geo[:geometry] = {
+        type: 'Polyline',
+        coordinates: [geo_object[:path]]
+      }
     end
+    output_geo
   end
 
   def query_array(where_clause, add_on = nil)

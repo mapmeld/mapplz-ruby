@@ -20,6 +20,7 @@ mapstore << [point1, point2]
 # a line or shape
 mapstore << [[point1, point2, point3]]
 mapstore << [[point1, point2, point3, point1]]
+mapstore << { path: [point1, point2], label: 'hello world' }
 
 # GeoJSON string or object
 mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
@@ -42,7 +43,7 @@ mapstore << { type: "Feature", geometry: { type: "Point", properties: { name: "B
 
 ## Export HTML and GeoJSON
 
-Currently you can output the data as GeoJSON:
+You can output the data anytime as GeoJSON:
 
 ```
 @mapper = MapPLZ.new
@@ -50,21 +51,41 @@ Currently you can output the data as GeoJSON:
 @mapper.to_geojson
 ```
 
-You will be able to output an interactive, HTML+JavaScript map with Leaflet.js
+You can add interactive, HTML+JavaScript maps which use Leaflet.js
 
 ```
 require 'mapplz'
 
 @mapper = MapPLZ.new
-@mapper << mapplz_code
+@mapper << geo_stuff
 @mapper.render_html
 ```
 
-You would be able to use it in Rails + HAML templates, too:
+This is based on the Leaflet-Rails plugin.
 
 ```
-div#map
-  = @mapper.embed_html
+Leaflet.tile_layer = 'http://{s}.somedomain.com/blabla/{z}/{x}/{y}.png'
+@mapper.render_html
+```
+
+You can pass options to render_html, including new default styles for lines and shapes:
+
+```
+@mapper.render_html(max_zoom: 18, fillColor: '#00f')
+```
+
+You can also add styles to your data as it's entered into the map datastore.
+
+```
+@mapper << { path: [point1, point2], color: 'red', opacity: 0.8 }
+```
+
+All of these would appear as clickable map features with popups:
+
+```
+@mapper << [40, -70, 'hello popup']
+@mapper << { lat: 40, lng: -80, label: 'hello popup' }
+@mapper << { path: [point1, point2], color: 'red', label: 'the red line' }
 ```
 
 ## Queries

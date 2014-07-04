@@ -80,6 +80,16 @@ describe 'store objects' do
     line[:type].should eq('polyline')
   end
 
+  it 'stores a line with a label' do
+    point1 = [1, 2]
+    point2 = [3, 4]
+    point3 = [5, 6]
+    line = @mapstore << { path: [point1, point2, point3], label: 'hello world' }
+    line[:path].should eq([[1, 2], [3, 4], [5, 6]])
+    line[:type].should eq('polyline')
+    line[:label].should eq('hello world')
+  end
+
   it 'stores a polygon' do
     point1 = [1, 2]
     point2 = [3, 4]

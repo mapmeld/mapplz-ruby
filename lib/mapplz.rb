@@ -2,6 +2,7 @@
 
 require 'sql_parser'
 require 'json'
+include Leaflet::ViewHelpers
 
 # MapPLZ datastore
 class MapPLZ
@@ -83,6 +84,87 @@ class MapPLZ
     geojson.to_json
   end
 
+  def render_html(options = {})
+    # Leaflet options
+    options[:tile_layer] ||= Leaflet.tile_layer
+    options[:attribution] ||= Leaflet.attribution
+    options[:max_zoom] ||= Leaflet.max_zoom
+    options[:container_id] ||= 'map'
+
+    geojson_features = JSON.parse(to_geojson)['features']
+
+    # use Leaflet to add clickable markers
+    options[:markers] = []
+    geojson_features.each do |feature|
+      next if feature['geometry']['type'] != 'Point'
+
+      if feature.key?('properties')
+        if feature['properties'].is_a?(Hash) && feature['properties'].key?('label')
+          label = feature['properties']['label']
+        elsif feature['properties'].key?('properties') && feature['properties']['properties'].is_a?(Array) && feature['properties']['properties'].length == 1
+          label = feature['properties']['properties'][0]
+        end
+      else
+        label = nil
+      end
+      options[:markers] << { latlng: feature['geometry']['coordinates'].reverse, popup: label }
+    end
+
+    render_text = map(options)
+
+    # add clickable lines and polygons after
+    # Leaflet-Rails does not support clickable lines or any polygons
+    geojson_features.each do |feature|
+      next if feature['geometry']['type'] == 'Point'
+
+      label = nil
+      path_options = {}
+      path_options[:color] = options[:color] if options.key?(:color)
+      path_options[:opacity] = options[:opacity] if options.key?(:opacity)
+      path_options[:fillColor] = options[:fillColor] if options.key?(:fillColor)
+      path_options[:fillOpacity] = options[:fillOpacity] if options.key?(:fillOpacity)
+      path_options[:weight] = options[:weight] if options.key?(:weight)
+      path_options[:stroke] = options[:stroke] if options.key?(:stroke)
+
+      if feature.key?('properties')
+        if feature['properties'].key?('label')
+          label = feature['properties']['label']
+        elsif feature['properties'].key?('properties') && feature['properties']['properties'].is_a?(Array) && feature['properties']['properties'].length == 1
+          label = feature['properties']['properties'][0]
+        end
+
+        path_options[:color] = feature['properties']['color'] if feature['properties'].key?('color')
+        path_options[:opacity] = feature['properties']['opacity'].to_f if feature['properties'].key?('opacity')
+        path_options[:fillColor] = feature['properties']['fillColor'] if feature['properties'].key?('fillColor')
+        path_options[:fillOpacity] = feature['properties']['fillOpacity'].to_f if feature['properties'].key?('fillOpacity')
+        path_options[:weight] = feature['properties']['weight'].to_i if feature['properties'].key?('weight')
+        path_options[:stroke] = feature['properties']['stroke'] if feature['properties'].key?('stroke')
+        path_options[:clickable] = true unless label.nil?
+      end
+
+      flip_coordinates = feature['geometry']['coordinates']
+      if flip_coordinates[0][0].is_a?(Array)
+        flip_coordinates.each do |segment|
+          segment.map! { |coord| coord.reverse }
+        end
+      else
+        flip_coordinates.map! { |coord| coord.reverse }
+      end
+
+      if feature['geometry']['type'] == 'Polyline'
+        render_text += ('line = L.polyline(' + flip_coordinates.to_json + ", #{path_options.to_json}).addTo(map);\n").html_safe
+        render_text += "line.bindPopup('#{label}');\n".html_safe unless label.nil?
+      elsif feature['geometry']['type'] == 'Polygon'
+        render_text += ('polygon = L.polygon(' + flip_coordinates[0].to_json + ", #{path_options.to_json}).addTo(map);\n").html_safe
+        render_text += "polygon.bindPopup('#{label}');\n".html_safe unless label.nil?
+      end
+
+      render_text
+    end
+
+    render_text
+  end
+
   # alias methods
 
   # aliases for add
@@ -106,6 +188,11 @@ class MapPLZ
 
   def length(where_clause = nil, add_on = nil)
     count(where_clause, add_on)
+  end
+
+  # aliases for render_html
+  def embed_html(options = {})
+    render_html(options)
   end
 
   private
@@ -363,6 +450,42 @@ class MapPLZ
           geo_object[key.to_sym] = user_geo[key]
         end
         geo_objects << geo_object
+      elsif user_geo.key?('path') || user_geo.key?(:path)
+        # try line or polygon
+        path_pts = []
+        path = user_geo['path'] if user_geo.key?('path')
+        path = user_geo[:path] if user_geo.key?(:path)
+        path.each do |path_pt|
+          if lonlat
+            lat = path_pt[1] || path_pt[:lat]
+            lng = path_pt[0] || path_pt[:lng]
+          else
+            lat = path_pt[0] || path_pt[:lat]
+            lng = path_pt[1] || path_pt[:lng]
+          end
+          path_pts << [lat, lng]
+        end
+
+        # polygon border repeats first point
+        if path_pts[0] == path_pts.last
+          geo_type = 'polygon'
+        else
+          geo_type = 'polyline'
+        end
+
+        geoitem = GeoItem.new(@db_type)
+        geoitem[:path] = path_pts
+        geoitem[:type] = geo_type
+
+        property_list = user_geo.clone
+        property_list = property_list[:properties] if property_list.key?(:properties)
+        property_list = property_list['properties'] if property_list.key?('properties')
+        property_list.delete(:path)
+        property_list.keys.each do |prop|
+          geoitem[prop.to_sym] = property_list[prop]
+        end
+
+        geo_objects << geoitem
       else
         # try GeoJSON
         if user_geo.key?('type')
@@ -422,7 +545,7 @@ class MapPLZ
 
   def as_geojson(geo_object)
     if geo_object.key?(:properties)
-      property_list = geo_object[:properties]
+      property_list = { properties: geo_object[:properties] }
     else
       property_list = geo_object.clone
       property_list.delete(:lat)

@@ -118,6 +118,22 @@ describe 'count and filter objects' do
   end
 end
 
+describe 'save and delete objects' do
+  before(:each) do
+    @mapstore = MapPLZ.new
+    @mapstore << [1, 2]
+    @mapstore << [3, 4]
+  end
+
+  it 'should delete a record from array' do
+    @mapstore.count('lat < 2').should eq(1)
+
+    pt = @mapstore.where('lat < 2')
+    pt[0].delete_item
+    @mapstore.count('lat < 2').should eq(0)
+  end
+end
+
 describe 'export GeoJSON' do
   before(:each) do
     @mapstore = MapPLZ.new

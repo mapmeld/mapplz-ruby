@@ -110,12 +110,26 @@ class MapPLZ
 
   private
 
-  # for future use: internal map object class
-  class GeoItem
-    def initialize
+  # internal map object record
+  class GeoItem < Hash
+    def initialize(db)
+      @db_type = db
     end
 
     def save!
+      # update record in database
+      unless @db_type == 'array'
+      end
+    end
+
+    def delete_item
+      if @db_type == 'array'
+        keys.each do |key|
+          delete(key)
+        end
+      else
+        # update record in database
+      end
     end
   end
 
@@ -165,24 +179,27 @@ class MapPLZ
       if codeline.index('plz') || codeline.index('please')
 
         if @code_level == 'marker'
-          @code_layers << {
-            lat: @code_latlngs[0][0],
-            lng: @code_latlngs[0][1],
-            label: @code_label || ''
-          }
+          geoitem = GeoItem.new(@db_type)
+          geoitem[:lat] = @code_latlngs[0][0]
+          geoitem[:lng] = @code_latlngs[0][1]
+          geoitem[:label] = @code_label || ''
+
+          @code_layers << geoitem
         elsif @code_level == 'line'
-          @code_layers << {
-            path: @code_latlngs,
-            strokeColor: (@code_color || ''),
-            label: @code_label || ''
-          }
+          geoitem = GeoItem.new(@db_type)
+          geoitem[:path] = @code_latlngs
+          geoitem[:stroke_color] = (@code_color || '')
+          geoitem[:label] = @code_label || ''
+
+          @code_layers << geoitem
         elsif @code_level == 'shape'
-          @code_layers << {
-            paths: @code_latlngs,
-            strokeColor: (@code_color || ''),
-            fillColor: (@code_color || ''),
-            label: @code_label || ''
-          }
+          geoitem = GeoItem.new(@db_type)
+          geoitem[:paths] = @code_latlngs
+          geoitem[:stroke_color] = (@code_color || '')
+          geoitem[:fill_color] = (@code_color || '')
+          geoitem[:label] = @code_label || ''
+
+          @code_layers << geoitem
         end
 
         if @code_button
@@ -272,7 +289,10 @@ class MapPLZ
               geo_type = 'polyline'
             end
 
-            { path: path_pts, type: geo_type }
+            geoitem = GeoItem.new(@db_type)
+            geoitem[:path] = path_pts
+            geoitem[:type] = geo_type
+            geoitem
           end
           return user_geo
         end
@@ -291,18 +311,15 @@ class MapPLZ
       validate_lng = user_geo[1].to_f != 0 || user_geo[1].to_s == '0'
 
       if validate_lat && validate_lng
+        geo_object = GeoItem.new(@db_type)
+        geo_object[:type] = 'point'
+
         if lonlat
-          geo_object = {
-            lat: user_geo[1].to_f,
-            lng: user_geo[0].to_f,
-            type: 'point'
-          }
+          geo_object[:lat] = user_geo[1].to_f
+          geo_object[:lng] = user_geo[0].to_f
         else
-          geo_object = {
-            lat: user_geo[0].to_f,
-            lng: user_geo[1].to_f,
-            type: 'point'
-          }
+          geo_object[:lat] = user_geo[0].to_f
+          geo_object[:lng] = user_geo[1].to_f
         end
       else
         fail 'no latitude or longitude found'
@@ -336,11 +353,11 @@ class MapPLZ
 
       if validate_lat && validate_lng
         # single hash
-        geo_object = {
-          lat: user_geo[validate_lat].to_f,
-          lng: user_geo[validate_lng].to_f,
-          type: 'point'
-        }
+        geo_object = GeoItem.new(@db_type)
+        geo_object[:lat] = user_geo[validate_lat].to_f
+        geo_object[:lng] = user_geo[validate_lng].to_f
+        geo_object[:type] = 'point'
+
         user_geo.keys.each do |key|
           next if key == validate_lat || key == validate_lng
           geo_object[key.to_sym] = user_geo[key]
@@ -356,7 +373,7 @@ class MapPLZ
             end
           elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
             # individual feature
-            geo_object = {}
+            geo_object = GeoItem.new(@db_type)
             coordinates = user_geo['geometry']['coordinates']
             if user_geo.key?('properties')
               user_geo['properties'].keys.each do |key|
@@ -380,7 +397,7 @@ class MapPLZ
             end
           elsif user_geo.key?(:geometry) && user_geo[:geometry].key?(:coordinates)
             # individual feature
-            geo_object = {}
+            geo_object = GeoItem.new(@db_type)
             coordinates = user_geo[:geometry][:coordinates]
             if user_geo.key?(:properties)
               user_geo[:properties].keys.each do |key|
@@ -457,6 +474,7 @@ class MapPLZ
 
     # filter array
     @my_array.select do |geo_obj|
+      return false if geo_obj.nil?
       is_valid = true
       conditions.each do |condition|
         field = condition[:field]

@@ -19,6 +19,7 @@ mapstore << [point1, point2]
 
 # a line or shape
 mapstore << [[point1, point2, point3]]
+mapstore << [[point1, point2, point3, point1]]
 
 # GeoJSON string or object
 mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
@@ -66,7 +67,7 @@ div#map
   = @mapper.embed_html
 ```
 
-## MapPLZ queries
+## Queries
 
 All of these are valid ways to query geodata:
 
@@ -79,23 +80,18 @@ mapplz.count
 mapplz.count('layer = ?', name_of_layer)
 ```
 
-## MapPLZ language
-You can make a map super quickly by using the MapPLZ language. A MapPLZ map
-can be described using as simply as this:
+## Databases
+
+You can store geodata in SQLite/Spatialite, Postgres/PostGIS, or MongoDB.
+
+MapPLZ simplifies geodata management and queries.
 
 ```
-map
-  marker
-    "The Statue of Liberty"
-    [40, -70]
-  plz
-plz
+# setting the database
+mapplz.set_db_type('postgis')
+
+# if a site uses ActiveRecord, the database will be detected automatically
 ```
-
-## MapPLZ and Databases
-
-You can store geodata in SQLite/Spatialite databases, or in Postgres/PostGIS
-databases, using a simplified MapPLZ API.
 
 ```
 # working with records
@@ -112,6 +108,19 @@ mapplz.near([lat, lng])
 
 # in an area
 mapplz.inside([point1, point2, point3, point1])
+```
+
+## Language
+You can make a map super quickly by using the MapPLZ language. A MapPLZ map
+can be described using as simply as this:
+
+```
+map
+  marker
+    "The Statue of Liberty"
+    [40, -70]
+  plz
+plz
 ```
 
 ## License

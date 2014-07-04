@@ -5,14 +5,29 @@ require 'json'
 
 # MapPLZ datastore
 class MapPLZ
+  DATABASES = %w(array postgres postgresql postgis sqlite spatialite mongodb)
+
   def initialize
     @db_type = 'array'
     @parser = SqlParser.new
     @my_array = []
+
+    if defined?(ActiveRecord)
+      db_adapter = ActiveRecord::Base.connection.adapter_name
+      set_db_type(db_adapter)
+    end
   end
 
-  def add(user_geo)
-    geo_objects = standardize_geo(user_geo)
+  def set_db_type(db)
+    db.downcase!
+    fail 'Database type not supported by MapPLZ' unless DATABASES.include?(db)
+    db = 'postgis' if db == 'postgres' || db == 'postgresql'
+    db = 'spatialite' if db == 'sqlite'
+    @db_type = db
+  end
+
+  def add(user_geo, lonlat = false)
+    geo_objects = standardize_geo(user_geo, lonlat)
     @my_array += geo_objects
 
     if geo_objects.length == 1
@@ -31,7 +46,7 @@ class MapPLZ
     end
   end
 
-  def query(where_clause, add_on)
+  def query(where_clause, add_on = nil)
     if where_clause.present?
       if @db_type == 'array'
         query_array(where_clause, add_on)
@@ -82,6 +97,11 @@ class MapPLZ
     add(user_geo)
   end
 
+  # aliases for query
+  def where(where_clause, add_on = nil)
+    query(where_clause, add_on)
+  end
+
   # aliases for count
   def size(where_clause = nil, add_on = nil)
     count(where_clause, add_on)
@@ -92,6 +112,14 @@ class MapPLZ
   end
 
   private
+
+  class GeoItem
+    def initialize
+    end
+
+    def save!
+    end
+  end
 
   def code_line(index)
     return if index >= @code_lines.length
@@ -210,7 +238,7 @@ class MapPLZ
     code_line(index + 1)
   end
 
-  def standardize_geo(user_geo)
+  def standardize_geo(user_geo, lonlat = false)
     geo_objects = []
 
     if user_geo.is_a?(String)
@@ -223,6 +251,35 @@ class MapPLZ
     end
 
     if user_geo.is_a?(Array) && user_geo.length > 0
+      if user_geo[0].is_a?(Array) && user_geo[0].length > 0
+        if user_geo[0][0].is_a?(Array) || (user_geo[0][0].is_a?(Hash) && user_geo[0][0].key?(:lat) && user_geo[0][0].key?(:lng))
+          # lines and shapes
+          user_geo.map! do |path|
+            path_pts = []
+            path.each do |path_pt|
+              if lonlat
+                lat = path_pt[1] || path_pt[:lat]
+                lng = path_pt[0] || path_pt[:lng]
+              else
+                lat = path_pt[0] || path_pt[:lat]
+                lng = path_pt[1] || path_pt[:lng]
+              end
+              path_pts << [lat, lng]
+            end
+
+            # polygon border repeats first point
+            if path_pts[0] == path_pts.last
+              geo_type = 'polygon'
+            else
+              geo_type = 'polyline'
+            end
+
+            { path: path_pts, type: geo_type }
+          end
+          return user_geo
+        end
+      end
+
       # multiple objects being added? iterate through
       if user_geo[0].is_a?(Hash) || user_geo[0].is_a?(Array)
         user_geo.each do |geo_piece|
@@ -236,10 +293,19 @@ class MapPLZ
       validate_lng = user_geo[1].to_f != 0 || user_geo[1].to_s == '0'
 
       if validate_lat && validate_lng
-        geo_object = {
-          lat: user_geo[0].to_f,
-          lng: user_geo[1].to_f
-        }
+        if lonlat
+          geo_object = {
+            lat: user_geo[1].to_f,
+            lng: user_geo[0].to_f,
+            type: 'point'
+          }
+        else
+          geo_object = {
+            lat: user_geo[0].to_f,
+            lng: user_geo[1].to_f,
+            type: 'point'
+          }
+        end
       else
         fail 'no latitude or longitude found'
       end
@@ -274,7 +340,8 @@ class MapPLZ
         # single hash
         geo_object = {
           lat: user_geo[validate_lat].to_f,
-          lng: user_geo[validate_lng].to_f
+          lng: user_geo[validate_lng].to_f,
+          type: 'point'
         }
         user_geo.keys.each do |key|
           next if key == validate_lat || key == validate_lng
@@ -302,6 +369,7 @@ class MapPLZ
             if user_geo['geometry']['type'] == 'Point'
               geo_object[:lat] = coordinates[1].to_f
               geo_object[:lng] = coordinates[0].to_f
+              geo_object[:type] = 'point'
             end
 
             geo_objects << geo_object
@@ -325,6 +393,7 @@ class MapPLZ
             if user_geo[:geometry][:type] == 'Point'
               geo_object[:lat] = coordinates[1].to_f
               geo_object[:lng] = coordinates[0].to_f
+              geo_object[:type] = 'point'
             end
 
             geo_objects << geo_object
@@ -351,20 +420,32 @@ class MapPLZ
       properties: property_list
     }
 
-    if geo_object.key?(:lat) && geo_object.key?(:lng)
+    if geo_object[:type] == 'point'
       # point
       output_geo[:geometry] = {
         type: 'Point',
         coordinates: [geo_object[:lng], geo_object[:lat]]
       }
-    else
-      # other geometry
+    elsif geo_object[:type] == 'polyline'
+      # line
       output_geo[:geometry] = {
         type: 'Polyline',
-        coordinates: [geo_object[:path]]
+        coordinates: flip_path(geo_object[:path])
+      }
+    elsif geo_object[:type] == 'polygon'
+      # polygon
+      output_geo[:geometry] = {
+        type: 'Polygon',
+        coordinates: [flip_path(geo_object[:path])]
       }
     end
     output_geo
+  end
+
+  def flip_path(path)
+    path.map! do |pt|
+      pt.reverse
+    end
   end
 
   def query_array(where_clause, add_on = nil)

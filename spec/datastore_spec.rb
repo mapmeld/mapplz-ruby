@@ -7,14 +7,21 @@ describe 'store objects' do
     @mapstore = MapPLZ.new
   end
 
-  it 'stores a [x, y] point' do
+  it 'stores a [lat, lng] point' do
     pt = @mapstore << [1, 2]
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
+    pt[:type].should eq('point')
+  end
+
+  it 'stores a [lng, lat] point' do
+    pt = @mapstore.add([1, 2], lonlat: true)
+    pt[:lat].should eq(2)
+    pt[:lng].should eq(1)
   end
 
   it 'stores additional values as an array of properties' do
-    pt = @mapstore.add([1, 2, 3, 4])
+    pt = @mapstore << [1, 2, 3, 4]
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
     pt[:properties].should eq([3, 4])
@@ -53,6 +60,33 @@ describe 'store objects' do
     pt = @mapstore << { type: 'Feature', geometry: { type: 'Point', coordinates: [2, 1] } }
     pt[:lat].should eq(1)
     pt[:lng].should eq(2)
+  end
+
+  it 'stores a line of hash points' do
+    point1 = { lat: 1, lng: 2 }
+    point2 = { lat: 3, lng: 4 }
+    point3 = { lat: 5, lng: 6 }
+    line = @mapstore << [[point1, point2, point3]]
+    line[:path].should eq([[1, 2], [3, 4], [5, 6]])
+    line[:type].should eq('polyline')
+  end
+
+  it 'stores a line' do
+    point1 = [1, 2]
+    point2 = [3, 4]
+    point3 = [5, 6]
+    line = @mapstore << [[point1, point2, point3]]
+    line[:path].should eq([[1, 2], [3, 4], [5, 6]])
+    line[:type].should eq('polyline')
+  end
+
+  it 'stores a polygon' do
+    point1 = [1, 2]
+    point2 = [3, 4]
+    point3 = [5, 6]
+    line = @mapstore << [[point1, point2, point3, point1]]
+    line[:path].should eq([[1, 2], [3, 4], [5, 6], [1, 2]])
+    line[:type].should eq('polygon')
   end
 end
 
@@ -109,6 +143,17 @@ describe 'export GeoJSON' do
     data_pt['properties']['data'].should eq('byte')
     data_pt['properties']['number'].should eq(1)
     data_pt['properties'].key?('lat').should eq(false)
+  end
+
+  it 'outputs a line in lng,lat order' do
+    @mapstore << [[[1, 2], [3, 4]]]
+    gj = JSON.parse(@mapstore.to_geojson)
+    gj['type'].should eq('FeatureCollection')
+    gj['features'].length.should eq(3)
+
+    line = gj['features'][2]
+    line['geometry']['type'].should eq('Polyline')
+    line['geometry']['coordinates'].should eq([[2, 1], [4, 3]])
   end
 end
 

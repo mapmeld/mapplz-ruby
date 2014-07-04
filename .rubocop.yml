@@ -5,7 +5,7 @@ Style/MethodLength:
   Max: 200
 
 Style/LineLength:
-  Max: 150
+  Max: 200
 
 CyclomaticComplexity:
   Max: 80

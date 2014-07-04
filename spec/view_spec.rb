@@ -22,7 +22,7 @@ describe 'MapPLZ views' do
     result = @mapstore.render_html(center: {
                                      latlng: [51.52238797, -0.08366235665],
                                      zoom: 18
-                                  })
+                                   })
     result.should include('map.setView([51.52238797, -0.08366235665], 18)')
     result.should include('L.marker([40.1, -70.1]).addTo(map)')
   end

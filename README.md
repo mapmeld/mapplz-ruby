@@ -61,7 +61,7 @@ require 'mapplz'
 @mapper.render_html
 ```
 
-This is based on the Leaflet-Rails plugin.
+This is based on the Leaflet-Rails plugin. Set Leaflet defaults directly:
 
 ```
 Leaflet.tile_layer = 'http://{s}.somedomain.com/blabla/{z}/{x}/{y}.png'

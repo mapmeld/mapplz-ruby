@@ -12,13 +12,10 @@ class MapPLZ
     @parser = SqlParser.new
     @my_array = []
 
-    if defined?(ActiveRecord)
-      db_adapter = ActiveRecord::Base.connection.adapter_name
-      set_db_type(db_adapter)
-    end
+    choose_db(ActiveRecord::Base.connection.adapter_name) if defined?(ActiveRecord)
   end
 
-  def set_db_type(db)
+  def choose_db(db)
     db.downcase!
     fail 'Database type not supported by MapPLZ' unless DATABASES.include?(db)
     db = 'postgis' if db == 'postgres' || db == 'postgresql'
@@ -113,6 +110,7 @@ class MapPLZ
 
   private
 
+  # for future use: internal map object class
   class GeoItem
     def initialize
     end

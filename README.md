@@ -88,9 +88,8 @@ MapPLZ simplifies geodata management and queries.
 
 ```
 # setting the database
-mapplz.set_db_type('postgis')
-
-# if a site uses ActiveRecord, the database will be detected automatically
+# if a site uses ActiveRecord, the database will be set automatically
+mapplz.choose_db('postgis')
 ```
 
 ```

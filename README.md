@@ -118,6 +118,18 @@ mapplz.choose_db('postgis')
 pt = mapstore << [lat, lng]
 pt.name = "Sears Tower"
 pt.save!
+pt.delete_item
+```
+
+### Databases
+
+```
+# MongoDB
+mongo_client = Mongo::MongoClient.new
+database = mongo_client['mapplz']
+collection = database['geoitems']
+mapstore = MapPLZ.new(collection)
+mapstore.choose_db('mongodb')
 ```
 
 ### COMING SOON
@@ -135,12 +147,13 @@ You can make a map super quickly by using the MapPLZ language. A MapPLZ map
 can be described using as simply as this:
 
 ```
-map
+mymap = """map
   marker
     "The Statue of Liberty"
     [40, -70]
   plz
-plz
+plz"""
+@mapper << mymap
 ```
 
 ## License

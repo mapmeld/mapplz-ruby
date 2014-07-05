@@ -8,10 +8,16 @@ include Leaflet::ViewHelpers
 class MapPLZ
   DATABASES = %w(array postgres postgresql postgis sqlite spatialite mongodb)
 
-  def initialize
+  def initialize(db = nil)
     @db_type = 'array'
-    @parser = SqlParser.new
+    @db = {
+      client: db,
+      db_type: @db_type
+    }
+    @db_client = db
     @my_array = []
+
+    @parser = SqlParser.new
 
     choose_db(ActiveRecord::Base.connection.adapter_name) if defined?(ActiveRecord)
   end
@@ -21,12 +27,22 @@ class MapPLZ
     fail 'Database type not supported by MapPLZ' unless DATABASES.include?(db)
     db = 'postgis' if db == 'postgres' || db == 'postgresql'
     db = 'spatialite' if db == 'sqlite'
+    db = 'mongodb' if db == 'mongo'
     @db_type = db
+    @db[:type] = db
   end
 
   def add(user_geo, lonlat = false)
     geo_objects = standardize_geo(user_geo, lonlat)
-    @my_array += geo_objects
+
+    if @db_type == 'array'
+      @my_array += geo_objects
+    elsif @db_type == 'mongodb'
+      geo_objects.each do |geo_object|
+        reply = @db_client.insert(geo_object)
+        geo_object[:_id] = reply.to_s
+      end
+    end
 
     if geo_objects.length == 1
       geo_objects[0]
@@ -39,15 +55,37 @@ class MapPLZ
     results = query(where_clause, add_on)
     if @db_type == 'array'
       results.length
+    elsif @db_type == 'mongodb'
+      if where_clause.present?
+        # @db_client.find().count
+      else
+        @db_client.count
+      end
     else
       results.count
     end
   end
 
-  def query(where_clause, add_on = nil)
+  def query(where_clause = nil, add_on = nil)
     if where_clause.present?
       if @db_type == 'array'
         query_array(where_clause, add_on)
+      elsif @db_type == 'mongodb'
+        conditions = parse_sql(where_clause, add_on = nil)
+        mongo_conditions = {}
+        conditions.each do |condition|
+          field = condition[:field]
+          compare_value = add_on || condition[:value]
+          operator = condition[:operator].to_s
+
+          mongo_conditions[field] = compare_value if operator == '='
+          mongo_conditions[field] = { '$lt' => compare_value } if operator == '<'
+          mongo_conditions[field] = { '$lte' => compare_value } if operator == '<='
+          mongo_conditions[field] = { '$gt' => compare_value } if operator == '>'
+          mongo_conditions[field] = { '$gte' => compare_value } if operator == '>='
+        end
+
+        cursor = @db_client.find(mongo_conditions)
       else
         # @my_db.where(where_clause, add_on)
       end
@@ -55,9 +93,22 @@ class MapPLZ
       # count all
       if @db_type == 'array'
         @my_array
+      elsif @db_type == 'mongodb'
+        cursor = @db_client.find
       else
         # @my_db.all
       end
+    end
+
+    if @db_type == 'mongodb'
+      geo_results = []
+      cursor.each do |geo_item|
+        geo_item.keys.each do |key|
+          geo_item[key.to_sym] = geo_item.delete(key)
+        end
+        geo_results << geo_item
+      end
+      geo_results
     end
   end
 
@@ -177,7 +228,7 @@ class MapPLZ
   end
 
   # aliases for query
-  def where(where_clause, add_on = nil)
+  def where(where_clause = nil, add_on = nil)
     query(where_clause, add_on)
   end
 
@@ -200,12 +251,18 @@ class MapPLZ
   # internal map object record
   class GeoItem < Hash
     def initialize(db)
-      @db_type = db
+      @db = db
+      @db_type = db[:type]
+      @db_client = db[:client]
     end
 
     def save!
       # update record in database
-      unless @db_type == 'array'
+      if @db_type == 'mongodb'
+        consistent_id = self[:_id]
+        delete(:_id)
+        @db[:client].update({ _id: BSON::ObjectId(consistent_id) }, self)
+        self[:_id] = consistent_id
       end
     end
 
@@ -214,8 +271,9 @@ class MapPLZ
         keys.each do |key|
           delete(key)
         end
-      else
+      elsif @db_type == 'mongodb'
         # update record in database
+        @db[:client].remove(_id: BSON::ObjectId(self[:_id]))
       end
     end
   end
@@ -266,21 +324,21 @@ class MapPLZ
       if codeline.index('plz') || codeline.index('please')
 
         if @code_level == 'marker'
-          geoitem = GeoItem.new(@db_type)
+          geoitem = GeoItem.new(@db)
           geoitem[:lat] = @code_latlngs[0][0]
           geoitem[:lng] = @code_latlngs[0][1]
           geoitem[:label] = @code_label || ''
 
           @code_layers << geoitem
         elsif @code_level == 'line'
-          geoitem = GeoItem.new(@db_type)
+          geoitem = GeoItem.new(@db)
           geoitem[:path] = @code_latlngs
           geoitem[:stroke_color] = (@code_color || '')
           geoitem[:label] = @code_label || ''
 
           @code_layers << geoitem
         elsif @code_level == 'shape'
-          geoitem = GeoItem.new(@db_type)
+          geoitem = GeoItem.new(@db)
           geoitem[:paths] = @code_latlngs
           geoitem[:stroke_color] = (@code_color || '')
           geoitem[:fill_color] = (@code_color || '')
@@ -376,7 +434,7 @@ class MapPLZ
               geo_type = 'polyline'
             end
 
-            geoitem = GeoItem.new(@db_type)
+            geoitem = GeoItem.new(@db)
             geoitem[:path] = path_pts
             geoitem[:type] = geo_type
             geoitem
@@ -398,7 +456,7 @@ class MapPLZ
       validate_lng = user_geo[1].to_f != 0 || user_geo[1].to_s == '0'
 
       if validate_lat && validate_lng
-        geo_object = GeoItem.new(@db_type)
+        geo_object = GeoItem.new(@db)
         geo_object[:type] = 'point'
 
         if lonlat
@@ -440,7 +498,7 @@ class MapPLZ
 
       if validate_lat && validate_lng
         # single hash
-        geo_object = GeoItem.new(@db_type)
+        geo_object = GeoItem.new(@db)
         geo_object[:lat] = user_geo[validate_lat].to_f
         geo_object[:lng] = user_geo[validate_lng].to_f
         geo_object[:type] = 'point'
@@ -473,7 +531,7 @@ class MapPLZ
           geo_type = 'polyline'
         end
 
-        geoitem = GeoItem.new(@db_type)
+        geoitem = GeoItem.new(@db)
         geoitem[:path] = path_pts
         geoitem[:type] = geo_type
 
@@ -496,7 +554,7 @@ class MapPLZ
             end
           elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
             # individual feature
-            geo_object = GeoItem.new(@db_type)
+            geo_object = GeoItem.new(@db)
             coordinates = user_geo['geometry']['coordinates']
             if user_geo.key?('properties')
               user_geo['properties'].keys.each do |key|
@@ -520,7 +578,7 @@ class MapPLZ
             end
           elsif user_geo.key?(:geometry) && user_geo[:geometry].key?(:coordinates)
             # individual feature
-            geo_object = GeoItem.new(@db_type)
+            geo_object = GeoItem.new(@db)
             coordinates = user_geo[:geometry][:coordinates]
             if user_geo.key?(:properties)
               user_geo[:properties].keys.each do |key|
@@ -586,14 +644,18 @@ class MapPLZ
     end
   end
 
-  def query_array(where_clause, add_on = nil)
-    # prepare where clause for parse
+  def parse_sql(where_clause, add_on = nil)
     where_clause.downcase! unless where_clause.blank?
     where_clause = where_clause.gsub('?', '\'?\'') if add_on.present?
     where_clause = 'select * from bogus_table where ' + where_clause
 
     # parse where conditions
-    conditions = @parser.parse(where_clause).tree[:conditions]
+    @parser.parse(where_clause).tree[:conditions]
+  end
+
+  def query_array(where_clause, add_on = nil)
+    # prepare where clause for parse
+    conditions = parse_sql(where_clause, add_ons)
 
     # filter array
     @my_array.select do |geo_obj|

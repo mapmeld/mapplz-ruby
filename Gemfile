@@ -10,3 +10,5 @@ gem 'activerecord-spatialite-adapter', '~> 0.4.1'
 
 # use an older version of PostGIS adapter to avoid Spatialite conflict
 gem 'activerecord-postgis-adapter', '~> 0.5.0'
+
+gem 'mongo', '~> 1.10.2'

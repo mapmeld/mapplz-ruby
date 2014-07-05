@@ -9,7 +9,7 @@ class MapPLZ
   DATABASES = %w(array postgres postgresql postgis sqlite spatialite mongodb)
 
   def initialize(db = {})
-    @db_type = db[:type] || 'array'
+    @db_type = 'array'
     @db_client = db
     @db = {
       client: @db_client,

@@ -105,16 +105,23 @@ class MapPLZ
 
         cursor = @db_client.find(mongo_conditions)
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}", add_on || '')
+        if add_on.is_a?(String)
+          where_clause = where_clause.gsub('?', "'#{add_on}'")
+        elsif add_on.is_a?(Integer) || add_on.is_a?(Float)
+          where_clause = where_clause.gsub('?', "#{add_on}")
+        end
+        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}")
       else
         # @my_db.where(where_clause, add_on)
       end
     else
-      # count all
+      # query all
       if @db_type == 'array'
         geo_results = @my_array
       elsif @db_type == 'mongodb'
         cursor = @db_client.find
+      elsif @db_type == 'postgis'
+        cursor = @db_client.exec('SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz')
       else
         # @my_db.all
       end

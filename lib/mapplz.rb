@@ -42,6 +42,10 @@ class MapPLZ
         reply = @db_client.insert(geo_object)
         geo_object[:_id] = reply.to_s
       end
+    elsif @db_type == 'postgis'
+      geo_objects.each do |geo_object|
+        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', 'POINT(#{geo_object[:lng]}, #{geo_object[:lat]})')")
+      end
     end
 
     if geo_objects.length == 1

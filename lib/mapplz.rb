@@ -44,7 +44,15 @@ class MapPLZ
       end
     elsif @db_type == 'postgis'
       geo_objects.each do |geo_object|
-        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', 'POINT(#{geo_object[:lng]} #{geo_object[:lat]})')")
+        if geo_object[:type] == 'point'
+          geom = "POINT(#{geo_object[:lng]} #{geo_object[:lat]})"
+        elsif geo_object[:type] == 'polyline'
+          geom = "LINESTRING(#{geo_object[:path].to_json})"
+        elsif geo_object[:type] == 'polygon'
+          geom = "POLYGON(#{geo_object[:path].to_json})"
+        end
+        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}')")
+        geo_object[:id] = reply.to_s
       end
     end
 
@@ -91,8 +99,7 @@ class MapPLZ
 
         cursor = @db_client.find(mongo_conditions)
       elsif @db_type == 'postgis'
-        pg_conditions = {}
-        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}", add_ons || '')
+        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}", add_on || '')
       else
         # @my_db.where(where_clause, add_on)
       end
@@ -271,6 +278,8 @@ class MapPLZ
         delete(:_id)
         @db[:client].update({ _id: BSON::ObjectId(consistent_id) }, self)
         self[:_id] = consistent_id
+      elsif @db_type == 'postgis'
+        @db_client.exec("UPDATE mapplz WHERE id = #{self[:id]}")
       end
     end
 
@@ -282,6 +291,8 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         # update record in database
         @db[:client].remove(_id: BSON::ObjectId(self[:_id]))
+      elsif @db_type == 'postgis'
+        @db_client.exec("DELETE FROM mapplz WHERE id = #{self[:id]}")
       end
     end
   end

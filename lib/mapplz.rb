@@ -47,12 +47,18 @@ class MapPLZ
         if geo_object[:type] == 'point'
           geom = "POINT(#{geo_object[:lng]} #{geo_object[:lat]})"
         elsif geo_object[:type] == 'polyline'
-          geom = "LINESTRING(#{geo_object[:path].to_json})"
+          linestring = geo_object[:path].map do |path_pt|
+            "#{path_pt[1]} #{path_pt[0]}"
+          end
+          geom = "LINESTRING(#{linestring.join(', ')})"
         elsif geo_object[:type] == 'polygon'
-          geom = "POLYGON(#{geo_object[:path].to_json})"
+          linestring = geo_object[:path][0].map do |path_pt|
+            "#{path_pt[1]} #{path_pt[0]}"
+          end
+          geom = "POLYGON((#{linestring.join(', ')}))"
         end
         reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}')")
-        geo_object[:id] = reply.first['id']
+        geo_object[:id] = reply[0]['id']
       end
     end
 

@@ -287,7 +287,7 @@ class MapPLZ
       elsif @db_type == 'postgis'
         updaters = []
         keys.each do |key|
-          next if [:id, :lat, :lng, :path].include?(key)
+          next if [:id, :lat, :lng, :path, :type].include?(key)
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end

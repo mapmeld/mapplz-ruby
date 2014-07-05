@@ -58,7 +58,7 @@ class MapPLZ
           geom = "POLYGON((#{linestring.join(', ')}))"
         end
         reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}')")
-        fail reply.values
+        fail reply.values.to_s
         geo_object[:id] = reply[0]['id']
       end
     end

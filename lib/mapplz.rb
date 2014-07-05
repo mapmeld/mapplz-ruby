@@ -44,7 +44,7 @@ class MapPLZ
       end
     elsif @db_type == 'postgis'
       geo_objects.each do |geo_object|
-        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', 'POINT(#{geo_object[:lng]}, #{geo_object[:lat]})')")
+        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', 'POINT(#{geo_object[:lng]} #{geo_object[:lat]})')")
       end
     end
 
@@ -90,6 +90,9 @@ class MapPLZ
         end
 
         cursor = @db_client.find(mongo_conditions)
+      elsif @db_type == 'postgis'
+        pg_conditions = {}
+        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}", add_ons || '')
       else
         # @my_db.where(where_clause, add_on)
       end
@@ -104,7 +107,7 @@ class MapPLZ
       end
     end
 
-    if @db_type == 'mongodb'
+    unless cursor.nil?
       geo_results = []
       cursor.each do |geo_item|
         geo_item.keys.each do |key|

@@ -6,7 +6,7 @@ require 'pg'
 describe 'test PostGIS' do
   before(:all) do
     @conn = PG.connect(dbname: 'travis_postgis')
-    @conn.exec('CREATE TABLE mapplz (id INTEGER, label VARCHAR(30), geom public.geometry)')
+    @conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom public.geometry)')
   end
 
   before(:each) do

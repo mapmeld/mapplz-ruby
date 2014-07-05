@@ -9,7 +9,7 @@ class MapPLZ
   DATABASES = %w(array postgres postgresql postgis sqlite spatialite mongodb)
 
   def initialize(db = {})
-    @db_type = db[:type] || 'array'
+    @db_type = 'array'
     @db_client = db
     @db = {
       client: @db_client,
@@ -41,6 +41,24 @@ class MapPLZ
       geo_objects.each do |geo_object|
         reply = @db_client.insert(geo_object)
         geo_object[:_id] = reply.to_s
+      end
+    elsif @db_type == 'postgis'
+      geo_objects.each do |geo_object|
+        if geo_object[:type] == 'point'
+          geom = "POINT(#{geo_object[:lng]} #{geo_object[:lat]})"
+        elsif geo_object[:type] == 'polyline'
+          linestring = geo_object[:path].map do |path_pt|
+            "#{path_pt[1]} #{path_pt[0]}"
+          end
+          geom = "LINESTRING(#{linestring.join(', ')})"
+        elsif geo_object[:type] == 'polygon'
+          linestring = geo_object[:path][0].map do |path_pt|
+            "#{path_pt[1]} #{path_pt[0]}"
+          end
+          geom = "POLYGON((#{linestring.join(', ')}))"
+        end
+        reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}') RETURNING id")
+        geo_object[:id] = reply[0]['id']
       end
     end
 
@@ -86,21 +104,30 @@ class MapPLZ
         end
 
         cursor = @db_client.find(mongo_conditions)
+      elsif @db_type == 'postgis'
+        if add_on.is_a?(String)
+          where_clause = where_clause.gsub('?', "'#{add_on}'")
+        elsif add_on.is_a?(Integer) || add_on.is_a?(Float)
+          where_clause = where_clause.gsub('?', "#{add_on}")
+        end
+        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}")
       else
         # @my_db.where(where_clause, add_on)
       end
     else
-      # count all
+      # query all
       if @db_type == 'array'
         geo_results = @my_array
       elsif @db_type == 'mongodb'
         cursor = @db_client.find
+      elsif @db_type == 'postgis'
+        cursor = @db_client.exec('SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz')
       else
         # @my_db.all
       end
     end
 
-    if @db_type == 'mongodb'
+    unless cursor.nil?
       geo_results = []
       cursor.each do |geo_item|
         geo_item.keys.each do |key|
@@ -264,6 +291,16 @@ class MapPLZ
         delete(:_id)
         @db[:client].update({ _id: BSON::ObjectId(consistent_id) }, self)
         self[:_id] = consistent_id
+      elsif @db_type == 'postgis'
+        updaters = []
+        keys.each do |key|
+          next if [:id, :lat, :lng, :path, :type].include?(key)
+          updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
+          updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
+        end
+        if updaters.length > 0
+          @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}")
+        end
       end
     end
 
@@ -275,6 +312,8 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         # update record in database
         @db[:client].remove(_id: BSON::ObjectId(self[:_id]))
+      elsif @db_type == 'postgis'
+        @db_client.exec("DELETE FROM mapplz WHERE id = #{self[:id]}")
       end
     end
   end

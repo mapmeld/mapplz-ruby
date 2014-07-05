@@ -1,23 +1,25 @@
 # Encoding: utf-8
 require 'spec_helper'
 require 'mapplz'
-require 'mongo'
+require 'pg'
 
-describe 'test MongoDB' do
+describe 'test PostGIS' do
   before(:all) do
-    mongo_client = Mongo::MongoClient.new
-    db = mongo_client['mapplz']
-    @collection = db['geoitems']
-    @collection.remove
+    @conn = PG.connect(dbname: 'travis_postgis')
+    @conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom public.geometry)')
   end
 
   before(:each) do
-    @mapstore = MapPLZ.new(@collection)
-    @mapstore.choose_db('mongodb')
+    @mapstore = MapPLZ.new(@conn)
+    @mapstore.choose_db('postgis')
   end
 
   after(:each) do
-    @collection.remove
+    @conn.exec('DELETE FROM mapplz WHERE 1 = 1')
+  end
+
+  after(:all) do
+    @conn.exec('DROP TABLE mapplz')
   end
 
   it 'stores data' do
@@ -32,7 +34,7 @@ describe 'test MongoDB' do
   it 'queries data' do
     @mapstore << { lat: 0, lng: 1, label: 'hello' }
     @mapstore << [2, 3, 'world']
-    results = @mapstore.where('lat < 2')
+    results = @mapstore.where("label = 'hello'")
     results.count.should eq(1)
     results[0][:label].should eq('hello')
   end

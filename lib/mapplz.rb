@@ -8,13 +8,13 @@ include Leaflet::ViewHelpers
 class MapPLZ
   DATABASES = %w(array postgres postgresql postgis sqlite spatialite mongodb)
 
-  def initialize(db = nil)
-    @db_type = 'array'
-    @db = {
-      client: db,
-      db_type: @db_type
-    }
+  def initialize(db = {})
+    @db_type = db[:type] || 'array'
     @db_client = db
+    @db = {
+      client: @db_client,
+      type: @db_type
+    }
     @my_array = []
 
     @parser = SqlParser.new
@@ -69,7 +69,7 @@ class MapPLZ
   def query(where_clause = nil, add_on = nil)
     if where_clause.present?
       if @db_type == 'array'
-        query_array(where_clause, add_on)
+        geo_results = query_array(where_clause, add_on)
       elsif @db_type == 'mongodb'
         conditions = parse_sql(where_clause, add_on = nil)
         mongo_conditions = {}
@@ -92,7 +92,7 @@ class MapPLZ
     else
       # count all
       if @db_type == 'array'
-        @my_array
+        geo_results = @my_array
       elsif @db_type == 'mongodb'
         cursor = @db_client.find
       else
@@ -108,8 +108,9 @@ class MapPLZ
         end
         geo_results << geo_item
       end
-      geo_results
     end
+
+    geo_results
   end
 
   def code(mapplz_code)
@@ -250,7 +251,7 @@ class MapPLZ
 
   # internal map object record
   class GeoItem < Hash
-    def initialize(db)
+    def initialize(db = { type: 'array', client: nil })
       @db = db
       @db_type = db[:type]
       @db_client = db[:client]
@@ -655,7 +656,7 @@ class MapPLZ
 
   def query_array(where_clause, add_on = nil)
     # prepare where clause for parse
-    conditions = parse_sql(where_clause, add_ons)
+    conditions = parse_sql(where_clause, add_on)
 
     # filter array
     @my_array.select do |geo_obj|

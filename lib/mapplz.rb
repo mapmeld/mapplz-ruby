@@ -52,7 +52,7 @@ class MapPLZ
           geom = "POLYGON(#{geo_object[:path].to_json})"
         end
         reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}')")
-        geo_object[:id] = reply.to_s
+        geo_object[:id] = reply.first['id']
       end
     end
 
@@ -279,7 +279,13 @@ class MapPLZ
         @db[:client].update({ _id: BSON::ObjectId(consistent_id) }, self)
         self[:_id] = consistent_id
       elsif @db_type == 'postgis'
-        @db_client.exec("UPDATE mapplz WHERE id = #{self[:id]}")
+        updaters = []
+        keys.each do |key|
+          next if [:id, :lat, :lng, :path].include?(key)
+          keys << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
+          keys << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
+        end
+        @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}")
       end
     end
 

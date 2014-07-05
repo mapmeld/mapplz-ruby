@@ -34,7 +34,7 @@ describe 'test PostGIS' do
   it 'queries data' do
     @mapstore << { lat: 0, lng: 1, label: 'hello' }
     @mapstore << [2, 3, 'world']
-    results = @mapstore.where('lat < 2')
+    results = @mapstore.where("label = 'hello'")
     results.count.should eq(1)
     results[0][:label].should eq('hello')
   end

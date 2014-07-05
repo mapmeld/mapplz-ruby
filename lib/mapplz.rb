@@ -288,10 +288,12 @@ class MapPLZ
         updaters = []
         keys.each do |key|
           next if [:id, :lat, :lng, :path].include?(key)
-          keys << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
-          keys << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
+          updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
+          updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
-        @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}")
+        if updaters.length > 0
+          @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}")
+        end
       end
     end
 

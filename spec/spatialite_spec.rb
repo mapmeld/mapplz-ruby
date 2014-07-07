@@ -7,7 +7,7 @@ describe 'test Spatialite' do
   before(:all) do
     # need to load Spatialite functions (even if sqlite file exists)
     @db = SQLite3::Database.new('data/mapplz.sqlite')
-    @db.execute(".load 'libspatialite.so'")
+    @db.execute("SELECT load_extension('libspatialite.so')")
     @db.execute('CREATE TABLE mapplz (id INTEGER PRIMARY KEY AUTOINCREMENT, label VARCHAR(30), geom BLOB NOT NULL)')
     @db.execute("SELECT CreateSpatialIndex('mapplz', 'geom')")
   end

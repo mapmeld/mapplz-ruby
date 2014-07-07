@@ -4,3 +4,4 @@ coverage
 log
 .rspec
 *.gem
+data/test.sqlite

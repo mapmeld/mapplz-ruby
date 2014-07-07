@@ -22,7 +22,7 @@ mapstore << [[point1, point2, point3]]
 mapstore << [[point1, point2, point3, point1]]
 mapstore << { path: [point1, point2], label: 'hello world' }
 
-# GeoJSON string or object
+# GeoJSON string or hash
 mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat] } }
 ```
 
@@ -121,15 +121,32 @@ pt.save!
 pt.delete_item
 ```
 
-### Databases
+### Database Setup
 
 ```
 # MongoDB
+require 'mongo'
 mongo_client = Mongo::MongoClient.new
 database = mongo_client['mapplz']
 collection = database['geoitems']
 mapstore = MapPLZ.new(collection)
 mapstore.choose_db('mongodb')
+
+# PostGIS
+require 'pg'
+conn = PG.connect(dbname: 'your_db')
+conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom public.geometry)')
+mapstore = MapPLZ.new(conn)
+mapstore.choose_db('postgis')
+
+# Spatialite
+require 'sqlite3'
+db = SQLite3::Database.new('data/mapplz.sqlite')
+db.execute(".load 'libspatialite.so'")
+db.execute('CREATE TABLE mapplz (id INTEGER PRIMARY KEY AUTOINCREMENT, label VARCHAR(30), geom BLOB NOT NULL)')
+db.execute("SELECT CreateSpatialIndex('mapplz', 'geom')")
+mapstore = MapPLZ.new(db)
+mapstore.choose_db('spatialite')
 ```
 
 ### COMING SOON

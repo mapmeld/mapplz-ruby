@@ -597,6 +597,16 @@ class MapPLZ
         geo_objects << geoitem
       else
         # try GeoJSON
+        if user_geo.key?(:type)
+          user_geo['type'] = user_geo[:type] || ''
+          user_geo['features'] = user_geo[:features] if user_geo.key?(:features)
+          user_geo['properties'] = user_geo[:properties] || {}
+          if user_geo.key?(:geometry)
+            user_geo['geometry'] = user_geo[:geometry]
+            user_geo['geometry']['type'] = user_geo[:geometry][:type]
+            user_geo['geometry']['coordinates'] = user_geo[:geometry][:coordinates]
+          end
+        end
         if user_geo.key?('type')
           if user_geo['type'] == 'FeatureCollection' && user_geo.key?('features')
             # recursive onto features
@@ -617,30 +627,22 @@ class MapPLZ
               geo_object[:lat] = coordinates[1].to_f
               geo_object[:lng] = coordinates[0].to_f
               geo_object[:type] = 'point'
-            end
-
-            geo_objects << geo_object
-          end
-        elsif user_geo.key?(:type)
-          if user_geo[:type] == 'FeatureCollection' && user_geo.key?(:features)
-            # recursive onto features
-            user_geo[:features].each do |feature|
-              geo_objects += standardize_geo(feature)
-            end
-          elsif user_geo.key?(:geometry) && user_geo[:geometry].key?(:coordinates)
-            # individual feature
-            geo_object = GeoItem.new(@db)
-            coordinates = user_geo[:geometry][:coordinates]
-            if user_geo.key?(:properties)
-              user_geo[:properties].keys.each do |key|
-                geo_object[key.to_sym] = user_geo[:properties][key]
+            elsif user_geo['geometry']['type'] == 'Polyline'
+              path_pts = user_geo['geometry']['coordinates']
+              path_pts.map! do |pt|
+                pt.reverse
               end
-            end
-
-            if user_geo[:geometry][:type] == 'Point'
-              geo_object[:lat] = coordinates[1].to_f
-              geo_object[:lng] = coordinates[0].to_f
-              geo_object[:type] = 'point'
+              geo_object[:path] = path_pts
+              geo_object[:type] = 'polyline'
+            elsif user_geo['geometry']['type'] == 'Polygon'
+              path_rings = user_geo['geometry']['coordinates']
+              path_rings.map! do |ring|
+                ring.map! do |pt|
+                  pt.reverse
+                end
+              end
+              geo_object[:path] = path_rings
+              geo_object[:type] = 'polygon'
             end
 
             geo_objects << geo_object

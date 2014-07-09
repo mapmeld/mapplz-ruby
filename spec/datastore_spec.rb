@@ -62,6 +62,21 @@ describe 'store objects' do
     pt[:lng].should eq(2)
   end
 
+  it 'stores a GeoJSON polyline' do
+    pt1 = [-70, 40]
+    pt2 = [-110, 65]
+    line = @mapstore << { type: 'Feature', geometry: { type: 'Polyline', coordinates: [pt1, pt2] } }
+    line[:path].should eq([[40, -70], [65, -110]])
+  end
+
+  it 'stores a GeoJSON polygon' do
+    pt1 = [-70, 40]
+    pt2 = [-110, 65]
+    pt3 = [-90, 80]
+    poly = @mapstore << { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[pt1, pt2, pt3, pt1]] } }
+    poly[:path].should eq([[[40, -70], [65, -110], [80, -90], [40, -70]]])
+  end
+
   it 'stores a line of hash points' do
     point1 = { lat: 1, lng: 2 }
     point2 = { lat: 3, lng: 4 }

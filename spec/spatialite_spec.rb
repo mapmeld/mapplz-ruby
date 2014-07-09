@@ -18,9 +18,9 @@ describe 'test Spatialite' do
     @db.execute('CREATE TABLE ')
   end
 
-after(:each) do
-  @conn.exec('DELETE FROM mapplz WHERE 1 = 1')
-end
+  after(:each) do
+    @conn.exec('DELETE FROM mapplz WHERE 1 = 1')
+  end
 
   after(:all) do
     @conn.exec('DROP TABLE mapplz')

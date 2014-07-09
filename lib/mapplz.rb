@@ -238,7 +238,7 @@ class MapPLZ
         flip_coordinates.map! { |coord| coord.reverse }
       end
 
-      if feature['geometry']['type'] == 'Polyline'
+      if feature['geometry']['type'] == 'LineString'
         render_text += ('line = L.polyline(' + flip_coordinates.to_json + ", #{path_options.to_json}).addTo(map);\n").html_safe
         render_text += "line.bindPopup('#{label}');\n".html_safe unless label.nil?
       elsif feature['geometry']['type'] == 'Polygon'
@@ -614,38 +614,68 @@ class MapPLZ
               geo_objects += standardize_geo(feature)
             end
           elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
-            # individual feature
-            geo_object = GeoItem.new(@db)
+            # each feature
             coordinates = user_geo['geometry']['coordinates']
-            if user_geo.key?('properties')
-              user_geo['properties'].keys.each do |key|
-                geo_object[key.to_sym] = user_geo['properties'][key]
-              end
-            end
 
             if user_geo['geometry']['type'] == 'Point'
+              geo_object = GeoItem.new(@db)
               geo_object[:lat] = coordinates[1].to_f
               geo_object[:lng] = coordinates[0].to_f
               geo_object[:type] = 'point'
-            elsif user_geo['geometry']['type'] == 'Polyline'
-              path_pts = user_geo['geometry']['coordinates']
-              path_pts.map! do |pt|
-                pt.reverse
-              end
-              geo_object[:path] = path_pts
+              geo_objects << geo_object
+            elsif user_geo['geometry']['type'] == 'LineString'
+              geo_object = GeoItem.new(@db)
+              flip_path(coordinates)
+              geo_object[:path] = coordinates
               geo_object[:type] = 'polyline'
+              geo_objects << geo_object
             elsif user_geo['geometry']['type'] == 'Polygon'
-              path_rings = user_geo['geometry']['coordinates']
-              path_rings.map! do |ring|
-                ring.map! do |pt|
-                  pt.reverse
-                end
+              geo_object = GeoItem.new(@db)
+              coordinates.map! do |ring|
+                flip_path(ring)
               end
-              geo_object[:path] = path_rings
+              geo_object[:path] = coordinates
               geo_object[:type] = 'polygon'
+              geo_objects << geo_object
+            elsif user_geo['geometry']['type'] == 'MultiPoint'
+              coordinates.each do |point|
+                geo_object = GeoItem.new(@db)
+                geo_object[:lat] = point[1].to_f
+                geo_object[:lng] = point[0].to_f
+                geo_object[:type] = 'point'
+                geo_objects << geo_object
+              end
+            elsif user_geo['geometry']['type'] == 'MultiLineString'
+              coordinates.each do |line|
+                geo_object = GeoItem.new(@db)
+                geo_object[:path] = flip_path(line)
+                geo_object[:type] = 'polyline'
+                geo_objects << geo_object
+              end
+            elsif user_geo['geometry']['type'] == 'MultiPolygon'
+              coordinates.each do |poly|
+                geo_object = GeoItem.new(@db)
+                poly.map! do |ring|
+                  flip_path(ring)
+                end
+                geo_object[:path] = poly
+                geo_object[:type] = 'polygon'
+                geo_objects << geo_object
+              end
             end
 
-            geo_objects << geo_object
+            # store properties on all generated geometries
+            prop_keys = {}
+            if user_geo.key?('properties')
+              user_geo['properties'].keys.each do |key|
+                prop_keys[key.to_sym] = user_geo['properties'][key]
+              end
+            end
+            geo_objects.each do |geo_object|
+              prop_keys.keys.each do |key|
+                geo_object[key] = prop_keys[key]
+              end
+            end
           end
         end
       end
@@ -678,7 +708,7 @@ class MapPLZ
     elsif geo_object[:type] == 'polyline'
       # line
       output_geo[:geometry] = {
-        type: 'Polyline',
+        type: 'LineString',
         coordinates: flip_path(geo_object[:path])
       }
     elsif geo_object[:type] == 'polygon'
@@ -693,7 +723,7 @@ class MapPLZ
 
   def flip_path(path)
     path.map! do |pt|
-      pt.reverse
+      [pt[1].to_f, pt[0].to_f]
     end
   end
 

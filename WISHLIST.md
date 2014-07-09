@@ -27,10 +27,6 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 * Store geodata as geodata in MongoDB - but MultiPolygons cannot
 * Geospatial index and queries
 
-# GeoJSON
-
-* Test and support all forms of GeoJSON input (especially the weird ones)
-
 # Visualizations
 
 * Instead of a generic HTML/JS, offer color_by(property) ?

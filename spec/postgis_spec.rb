@@ -43,7 +43,7 @@ describe 'test PostGIS' do
     ll_path = [[0, 1], [2, 3]]
     @mapstore << { path: ll_path }
     result = @mapstore.query
-    result[:path].should eq(ll_path)
+    result[0][:path].should eq(ll_path)
   end
 
   it 'updates geometry data' do
@@ -51,7 +51,7 @@ describe 'test PostGIS' do
     pt[:lat] = 7
     pt.save!
     result = @mapstore.query
-    result[:lat].should eq(7)
+    result[0][:lat].should eq(7)
   end
 
   it 'updates a record' do

@@ -132,22 +132,24 @@ class MapPLZ
           geo_item[key.to_sym] = geo_result[key]
         end
 
-        geom = (geo_result['geom'] || geo_result[:geom]).upcase
-        if geom.index('POINT')
-          coordinates = geom.gsub('POINT','').gsub('(','').gsub(')','').split(' ')
-          geo_item[:lat] = coordinates[1].to_f
-          geo_item[:lng] = coordinates[0].to_f
-        elsif geom.index('LINESTRING')
-          line_nodes = geom.gsub('LINESTRING', '').gsub('(','').gsub(')','').split(', ')
-          geo_item[:path] = line_nodes.map do |pt|
-            pt = pt.split(' ')
-            [pt[1].to_f, pt[0].to_f]
-          end
-        elsif geom.index('POLYGON')
-          line_nodes = geom.gsub('LINESTRING', '').gsub('(','').gsub(')','').split(', ')
-          geo_item[:path] = line_nodes.map do |pt|
-            pt = pt.split(' ')
-            [pt[1].to_f, pt[0].to_f]
+        if @db_type == 'postgis' || @db_type == 'spatialite'
+          geom = (geo_result['geom'] || geo_result[:geom]).upcase
+          if geom.index('POINT')
+            coordinates = geom.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
+            geo_item[:lat] = coordinates[1].to_f
+            geo_item[:lng] = coordinates[0].to_f
+          elsif geom.index('LINESTRING')
+            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(', ')
+            geo_item[:path] = line_nodes.map do |pt|
+              pt = pt.split(' ')
+              [pt[1].to_f, pt[0].to_f]
+            end
+          elsif geom.index('POLYGON')
+            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(', ')
+            geo_item[:path] = line_nodes.map do |pt|
+              pt = pt.split(' ')
+              [pt[1].to_f, pt[0].to_f]
+            end
           end
         end
         geo_results << geo_item
@@ -315,7 +317,7 @@ class MapPLZ
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
-        updaters << "geom = #{to_wkt}"
+        updaters << "geom = '#{to_wkt}'"
         if updaters.length > 0
           @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'postgis'
           @db_client.execute("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'spatialite'
@@ -698,9 +700,9 @@ class MapPLZ
                 prop_keys[key.to_sym] = user_geo['properties'][key]
               end
             end
-            geo_objects.each do |geo_object|
+            geo_objects.each do |geo|
               prop_keys.keys.each do |key|
-                geo_object[key] = prop_keys[key]
+                geo[key] = prop_keys[key]
               end
             end
           end

@@ -137,9 +137,30 @@ class MapPLZ
 
     unless cursor.nil?
       geo_results = []
-      cursor.each do |geo_item|
-        geo_item.keys.each do |key|
-          geo_item[key.to_sym] = geo_item.delete(key)
+      cursor.each do |geo_result|
+        geo_item = GeoItem.new
+        geo_result.keys.each do |key|
+          next if [:geom].include?(key.to_sym)
+          geo_item[key.to_sym] = geo_result[key]
+        end
+
+        geom = (geo_result['geom'] || geo_result[:geom]).upcase
+        if geom.index('POINT')
+          coordinates = geom.gsub('POINT','').gsub('(','').gsub(')','').split(' ')
+          geo_item[:lat] = coordinates[1].to_f
+          geo_item[:lng] = coordinates[0].to_f
+        elsif geom.index('LINESTRING')
+          line_nodes = geom.gsub('LINESTRING', '').gsub('(','').gsub(')','').split(', ')
+          geo_item[:path] = line_nodes.map do |pt|
+            pt = pt.split(' ')
+            [pt[1].to_f, pt[0].to_f]
+          end
+        elsif geom.index('POLYGON')
+          line_nodes = geom.gsub('LINESTRING', '').gsub('(','').gsub(')','').split(', ')
+          geo_item[:path] = line_nodes.map do |pt|
+            pt = pt.split(' ')
+            [pt[1].to_f, pt[0].to_f]
+          end
         end
         geo_results << geo_item
       end

@@ -39,6 +39,13 @@ describe 'test PostGIS' do
     results[0][:label].should eq('hello')
   end
 
+  it 'queries line data' do
+    ll_path = [[0, 1], [2, 3]]
+    @mapstore << { path: ll_path }
+    result = @mapstore.query
+    result[:path].should eq(ll_path)
+  end
+
   it 'updates a record' do
     pt = @mapstore << { lat: 0, lng: 1, label: 'hello' }
     pt[:label] = 'world'

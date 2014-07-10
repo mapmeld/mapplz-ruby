@@ -115,7 +115,7 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         cursor = @db_client.find
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec('SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz')
+        cursor = @db_client.exec('SELECT id, ST_AsText(geom) AS geom, label FROM mapplz')
       elsif @db_type == 'spatialite'
         cursor = @db_client.execute('SELECT id, AsText(geom) AS geom, label FROM mapplz')
       else

@@ -44,19 +44,7 @@ class MapPLZ
       end
     elsif @db_type == 'postgis' || @db_type == 'spatialite'
       geo_objects.each do |geo_object|
-        if geo_object[:type] == 'point'
-          geom = "POINT(#{geo_object[:lng]} #{geo_object[:lat]})"
-        elsif geo_object[:type] == 'polyline'
-          linestring = geo_object[:path].map do |path_pt|
-            "#{path_pt[1]} #{path_pt[0]}"
-          end
-          geom = "LINESTRING(#{linestring.join(', ')})"
-        elsif geo_object[:type] == 'polygon'
-          linestring = geo_object[:path][0].map do |path_pt|
-            "#{path_pt[1]} #{path_pt[0]}"
-          end
-          geom = "POLYGON((#{linestring.join(', ')}))"
-        end
+        geom = geo_object.to_wkt
         if @db_type == 'postgis'
           reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}') RETURNING id")
         elsif @db_type == 'spatialite'
@@ -327,6 +315,7 @@ class MapPLZ
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
+        updaters << "geom = #{to_wkt}"
         if updaters.length > 0
           @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'postgis'
           @db_client.execute("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'spatialite'
@@ -347,6 +336,23 @@ class MapPLZ
       elsif @db_type == 'spatialite'
         @db_client.execute("DELETE FROM mapplz WHERE id = #{self[:id]}")
       end
+    end
+
+    def to_wkt
+      if self[:type] == 'point'
+        geom = "POINT(#{self[:lng]} #{self[:lat]})"
+      elsif self[:type] == 'polyline'
+        linestring = self[:path].map do |path_pt|
+          "#{path_pt[1]} #{path_pt[0]}"
+        end
+        geom = "LINESTRING(#{linestring.join(', ')})"
+      elsif self[:type] == 'polygon'
+        linestring = self[:path][0].map do |path_pt|
+          "#{path_pt[1]} #{path_pt[0]}"
+        end
+        geom = "POLYGON((#{linestring.join(', ')}))"
+      end
+      geom
     end
   end
 

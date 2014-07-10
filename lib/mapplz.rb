@@ -46,9 +46,9 @@ class MapPLZ
       geo_objects.each do |geo_object|
         geom = geo_object.to_wkt
         if @db_type == 'postgis'
-          reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}') RETURNING id")
+          reply = @db_client.exec("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', ST_GeomFromText('#{geom}')) RETURNING id")
         elsif @db_type == 'spatialite'
-          reply = @db_client.execute("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', '#{geom}') RETURNING id")
+          reply = @db_client.execute("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', AsText('#{geom}')) RETURNING id")
         end
         geo_object[:id] = reply[0]['id']
       end
@@ -208,7 +208,7 @@ class MapPLZ
       options[:markers] << { latlng: feature['geometry']['coordinates'].reverse, popup: label }
     end
 
-    render_text = map(options)
+    render_text = map(options).gsub('</script>','')
 
     # add clickable lines and polygons after
     # Leaflet-Rails does not support clickable lines or any polygons
@@ -256,11 +256,9 @@ class MapPLZ
         render_text += ('polygon = L.polygon(' + flip_coordinates[0].to_json + ", #{path_options.to_json}).addTo(map);\n").html_safe
         render_text += "polygon.bindPopup('#{label}');\n".html_safe unless label.nil?
       end
-
-      render_text
     end
 
-    render_text
+    render_text + '</script>'
   end
 
   # alias methods
@@ -317,7 +315,8 @@ class MapPLZ
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
-        updaters << "geom = '#{to_wkt}'"
+        updaters << "geom = ST_GeomFromText('#{to_wkt}')" if @db_type == 'postgis'
+        updaters << "geom = AsText('#{to_wkt}')" if @db_type == 'spatialite'
         if updaters.length > 0
           @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'postgis'
           @db_client.execute("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'spatialite'

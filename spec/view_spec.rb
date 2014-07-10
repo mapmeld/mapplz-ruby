@@ -43,8 +43,8 @@ describe 'MapPLZ views' do
     @mapstore << { path: [[0, 1], [2, 3], [4, 5], [0, 1]] }
 
     result = @mapstore.render_html
-    result.should include('L.polyline([[0,1],[2,3]], {}).addTo(map)')
-    result.should include('L.polygon([[0,1],[2,3],[4,5],[0,1]], {}).addTo(map)')
+    result.should include('L.polyline([[0.0,1.0],[2.0,3.0]], {}).addTo(map)')
+    result.should include('L.polygon([[0.0,1.0],[2.0,3.0],[4.0,5.0],[0.0,1.0]], {}).addTo(map)')
   end
 
   it 'should include styled lines and shapes' do
@@ -52,8 +52,8 @@ describe 'MapPLZ views' do
     @mapstore << { path: [[0, 1], [2, 3], [4, 5], [0, 1]], fillColor: '#f00' }
 
     result = @mapstore.render_html
-    result.should include('L.polyline([[0,1],[2,3]], {"clickable":true}).addTo(map)')
+    result.should include('L.polyline([[0.0,1.0],[2.0,3.0]], {"clickable":true}).addTo(map)')
     result.should include("line.bindPopup('hello world')")
-    result.should include("L.polygon([[0,1],[2,3],[4,5],[0,1]], {\"fillColor\":\"#f00\"}).addTo(map)")
+    result.should include("L.polygon([[0.0,1.0],[2.0,3.0],[4.0,5.0],[0.0,1.0]], {\"fillColor\":\"#f00\"}).addTo(map)")
   end
 end

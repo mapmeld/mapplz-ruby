@@ -132,7 +132,12 @@ class MapPLZ
           geo_item[key.to_sym] = geo_result[key]
         end
 
-        if @db_type == 'postgis' || @db_type == 'spatialite'
+        if @db_type == 'postgis'
+          gj_item = standardize_geo((geo_result['geom'] || geo_result[:geom]))[0]
+          geo_item[:path] = gj_item[:path] if gj_item.key?(:path)
+          geo_item[:lat] = gj_item[:lat] if gj_item.key?(:lat)
+          geo_item[:lng] = gj_item[:lng] if gj_item.key?(:lng)
+        elsif @db_type == 'spatialite'
           geom = (geo_result['geom'] || geo_result[:geom]).upcase
           if geom.index('POINT')
             coordinates = geom.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
@@ -208,7 +213,7 @@ class MapPLZ
       options[:markers] << { latlng: feature['geometry']['coordinates'].reverse, popup: label }
     end
 
-    render_text = map(options).gsub('</script>','')
+    render_text = map(options).gsub('</script>', '')
 
     # add clickable lines and polygons after
     # Leaflet-Rails does not support clickable lines or any polygons

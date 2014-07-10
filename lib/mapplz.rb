@@ -103,7 +103,7 @@ class MapPLZ
           where_clause = where_clause.gsub('?', "#{add_on}")
         end
 
-        cursor = @db_client.exec("SELECT id, ST_AsGeoJSON(geom) AS geom, label FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
         cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
       else
         # @my_db.where(where_clause, add_on)
@@ -132,12 +132,7 @@ class MapPLZ
           geo_item[key.to_sym] = geo_result[key]
         end
 
-        if @db_type == 'postgis'
-          gj_item = standardize_geo((geo_result['geom'] || geo_result[:geom]))[0]
-          geo_item[:path] = gj_item[:path] if gj_item.key?(:path)
-          geo_item[:lat] = gj_item[:lat] if gj_item.key?(:lat)
-          geo_item[:lng] = gj_item[:lng] if gj_item.key?(:lng)
-        elsif @db_type == 'spatialite'
+        if @db_type == 'postgis' || @db_type == 'spatialite'
           geom = (geo_result['geom'] || geo_result[:geom]).upcase
           if geom.index('POINT')
             coordinates = geom.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')

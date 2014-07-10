@@ -139,13 +139,13 @@ class MapPLZ
             geo_item[:lat] = coordinates[1].to_f
             geo_item[:lng] = coordinates[0].to_f
           elsif geom.index('LINESTRING')
-            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(', ')
+            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(',')
             geo_item[:path] = line_nodes.map do |pt|
               pt = pt.split(' ')
               [pt[1].to_f, pt[0].to_f]
             end
           elsif geom.index('POLYGON')
-            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(', ')
+            line_nodes = geom.gsub('POLYGON', '').gsub('(', '').gsub(')', '').split(', ')
             geo_item[:path] = line_nodes.map do |pt|
               pt = pt.split(' ')
               [pt[1].to_f, pt[0].to_f]

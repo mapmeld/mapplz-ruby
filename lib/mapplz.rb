@@ -172,13 +172,7 @@ class MapPLZ
   end
 
   def to_geojson
-    feature_list = []
-    if @db_type == 'array'
-      @my_array.each do |feature|
-        feature_list << as_geojson(feature)
-      end
-    end
-    geojson = { type: 'FeatureCollection', features: feature_list }
+    geojson = { type: 'FeatureCollection', features: query.map { |feature| JSON.parse(feature.to_geojson) } }
     geojson.to_json
   end
 
@@ -259,6 +253,12 @@ class MapPLZ
     end
 
     render_text + '</script>'
+  end
+
+  def self.flip_path(path)
+    path.map! do |pt|
+      [pt[1].to_f, pt[0].to_f]
+    end
   end
 
   # alias methods
@@ -354,6 +354,44 @@ class MapPLZ
         geom = "POLYGON((#{linestring.join(', ')}))"
       end
       geom
+    end
+
+    def to_geojson
+      if key?(:properties)
+        property_list = { properties: self[:properties] }
+      else
+        property_list = self.clone
+        property_list.delete(:lat)
+        property_list.delete(:lng)
+        property_list.delete(:path)
+        property_list.delete(:type)
+      end
+
+      output_geo = {
+        type: 'Feature',
+        properties: property_list
+      }
+
+      if self[:type] == 'point'
+        # point
+        output_geo[:geometry] = {
+          type: 'Point',
+          coordinates: [self[:lng], self[:lat]]
+        }
+      elsif self[:type] == 'polyline'
+        # line
+        output_geo[:geometry] = {
+          type: 'LineString',
+          coordinates: MapPLZ.flip_path(self[:path])
+        }
+      elsif self[:type] == 'polygon'
+        # polygon
+        output_geo[:geometry] = {
+          type: 'Polygon',
+          coordinates: [MapPLZ.flip_path(self[:path])]
+        }
+      end
+      output_geo.to_json
     end
   end
 
@@ -653,14 +691,14 @@ class MapPLZ
               geo_objects << geo_object
             elsif user_geo['geometry']['type'] == 'LineString'
               geo_object = GeoItem.new(@db)
-              flip_path(coordinates)
+              MapPLZ.flip_path(coordinates)
               geo_object[:path] = coordinates
               geo_object[:type] = 'polyline'
               geo_objects << geo_object
             elsif user_geo['geometry']['type'] == 'Polygon'
               geo_object = GeoItem.new(@db)
               coordinates.map! do |ring|
-                flip_path(ring)
+                MapPLZ.flip_path(ring)
               end
               geo_object[:path] = coordinates
               geo_object[:type] = 'polygon'
@@ -676,7 +714,7 @@ class MapPLZ
             elsif user_geo['geometry']['type'] == 'MultiLineString'
               coordinates.each do |line|
                 geo_object = GeoItem.new(@db)
-                geo_object[:path] = flip_path(line)
+                geo_object[:path] = MapPLZ.flip_path(line)
                 geo_object[:type] = 'polyline'
                 geo_objects << geo_object
               end
@@ -684,7 +722,7 @@ class MapPLZ
               coordinates.each do |poly|
                 geo_object = GeoItem.new(@db)
                 poly.map! do |ring|
-                  flip_path(ring)
+                  MapPLZ.flip_path(ring)
                 end
                 geo_object[:path] = poly
                 geo_object[:type] = 'polygon'
@@ -710,49 +748,6 @@ class MapPLZ
     end
 
     geo_objects
-  end
-
-  def as_geojson(geo_object)
-    if geo_object.key?(:properties)
-      property_list = { properties: geo_object[:properties] }
-    else
-      property_list = geo_object.clone
-      property_list.delete(:lat)
-      property_list.delete(:lng)
-      property_list.delete(:path)
-    end
-
-    output_geo = {
-      type: 'Feature',
-      properties: property_list
-    }
-
-    if geo_object[:type] == 'point'
-      # point
-      output_geo[:geometry] = {
-        type: 'Point',
-        coordinates: [geo_object[:lng], geo_object[:lat]]
-      }
-    elsif geo_object[:type] == 'polyline'
-      # line
-      output_geo[:geometry] = {
-        type: 'LineString',
-        coordinates: flip_path(geo_object[:path])
-      }
-    elsif geo_object[:type] == 'polygon'
-      # polygon
-      output_geo[:geometry] = {
-        type: 'Polygon',
-        coordinates: [flip_path(geo_object[:path])]
-      }
-    end
-    output_geo
-  end
-
-  def flip_path(path)
-    path.map! do |pt|
-      [pt[1].to_f, pt[0].to_f]
-    end
   end
 
   def parse_sql(where_clause, add_on = nil)

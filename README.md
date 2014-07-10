@@ -51,6 +51,14 @@ You can output the data anytime as GeoJSON:
 @mapper.to_geojson
 ```
 
+Each mapped item can be exported as GeoJSON or WKT
+
+```
+pt = @mapper << { lat: 40, lng: -70 }
+pt.to_wkt
+pt.to_geojson
+```
+
 You can add interactive, HTML+JavaScript maps which use Leaflet.js
 
 ```
@@ -93,12 +101,22 @@ All of these would appear as clickable map features with popups:
 All of these are valid ways to query geodata:
 
 ```
+# return all
+mapplz.query
+
 # with a value
 mapplz.where('layer = ?', name_of_layer)
 
 # get a count
 mapplz.count
 mapplz.count('layer = ?', name_of_layer)
+```
+
+Queries are returned as an array of GeoItems, which each can be exported as GeoJSON or WKT
+
+```
+my_features = @mapper.where('points > 10')
+collection = { type: 'FeatureCollection', features: my_features.map { |feature| JSON.parse(feature.to_geojson) } }
 ```
 
 ## Databases

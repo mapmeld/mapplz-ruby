@@ -54,11 +54,16 @@ describe 'parse GeoJSON' do
   end
 end
 
-# describe 'parse a shapefile' do
-#   before(:each) do
-#     @mapstore = MapPLZ.new
-#   end
-#
-#   it 'loads points from a shapefile using gdal' do
-#   end
-# end
+describe 'parse a shapefile' do
+  before(:each) do
+    @mapstore = MapPLZ.new
+  end
+
+  it 'loads points from a shapefile using gdal' do
+    shp_file = File.open('spec/data/data.shp')
+    pt = @mapstore << shp_file
+    pt[:lat].should eq(40)
+    pt[:lng].should eq(-70)
+    pt[:label].should eq('hello world')
+  end
+end

@@ -184,6 +184,18 @@ describe 'count and filter objects' do
     response[:lat].should eq(40)
     response[:lng].should eq(-70)
   end
+
+  it 'searches for point in polygon' do
+    pt = @mapstore << { lat: 40, lng: -70 }
+    @mapstore << { lat: 35, lng: 110 }
+
+    responses = @mapstore.within([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]])
+    responses.length.should eq(1)
+    responses[0][:lat].should eq(40)
+    responses[0][:lng].should eq(-70)
+
+    pt.within?([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]]).should eq(true)
+  end
 end
 
 describe 'save and delete objects' do

@@ -36,7 +36,7 @@ class MapPLZ
   end
 
   def add(user_geo, lonlat = false)
-    geo_objects = standardize_geo(user_geo, lonlat)
+    geo_objects = MapPLZ.standardize_geo(user_geo, lonlat: lonlat, db: @db)
 
     if @db_type == 'array'
       @my_array += geo_objects
@@ -129,7 +129,7 @@ class MapPLZ
     unless cursor.nil?
       geo_results = []
       cursor.each do |geo_result|
-        geo_item = GeoItem.new
+        geo_item = GeoItem.new(@db)
         geo_result.keys.each do |key|
           next if [:geom].include?(key.to_sym)
           geo_item[key.to_sym] = geo_result[key]
@@ -263,8 +263,9 @@ class MapPLZ
     render_text + '</script>'
   end
 
-  def near(user_geo, limit = 10, lon_lat = false)
+  def near(user_geo, limit = 10, max = 360, lon_lat = false)
     limit = limit.to_i
+    max = max.to_f
 
     if user_geo.is_a?(Hash)
       lat = user_geo[:lat] || user_geo['lat'] || user_geo[:latitude] || user_geo['latitude']
@@ -283,30 +284,22 @@ class MapPLZ
 
     if @db_type == 'array'
       @my_array.sort! do |a, b|
-        GeoItem.centroid(a)
-        a_lat = a[:lat]
-        a_lng = a[:lng]
-        a_distance = Geokdtree::Tree.distance([lat, lng], [a_lat, a_lng])
-
-        GeoItem.centroid(b)
-        b_lat = b[:lat]
-        b_lng = b[:lng]
-        b_distance = Geokdtree::Tree.distance([lat, lng], [b_lat, b_lng])
-
+        a_distance = a.distance_from([lat, lng])
+        b_distance = b.distance_from([lat, lng])
         a_distance <=> b_distance
       end
       geo_results = @my_array.slice(0, limit)
     elsif @db_type == 'mongodb'
       cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
     elsif @db_type == 'postgis'
-      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     elsif @db_type == 'spatialite'
-      cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     end
 
     unless cursor.nil?
       cursor.each do |geo_result|
-        geo_item = GeoItem.new
+        geo_item = GeoItem.new(@db)
         geo_result.keys.each do |key|
           next if [:geom].include?(key.to_sym)
           geo_item[key.to_sym] = geo_result[key]
@@ -323,12 +316,339 @@ class MapPLZ
   end
 
   def inside(user_geo)
+    geo_results = []
+    search_areas = MapPLZ.standardize_geo(user_geo)
+    search_areas.each do |search_area|
+      next unless search_area.key?(:path)
+      wkt = search_area.to_wkt
+
+      if @db_type == 'array'
+        # in-Ruby point-in-polygon
+        @my_array.each do |geo_item|
+          GeoItem.centroid(geo_item)
+          geo_results << geo_item if geo_item.inside?(search_area)
+        end
+      elsif @db_type == 'mongodb'
+        @db_client.command
+      elsif @db_type == 'postgis'
+        @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
+      elsif @db_type == 'spatialite'
+        @db_client.exec("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
+      end
+
+      unless cursor.nil?
+        cursor.each do |geo_result|
+          geo_item = GeoItem.new(@db)
+          geo_result.keys.each do |key|
+            next if [:geom].include?(key.to_sym)
+            geo_item[key.to_sym] = geo_result[key]
+          end
+
+          if @db_type == 'postgis' || @db_type == 'spatialite'
+            geom = (geo_result['geom'] || geo_result[:geom]).upcase
+            geo_item = parse_wkt(geo_item, geom)
+          end
+          geo_results << geo_item
+        end
+      end
+    end
+    geo_results
   end
 
   def self.flip_path(path)
     path.map! do |pt|
       [pt[1].to_f, pt[0].to_f]
     end
+  end
+
+  def self.standardize_geo(user_geo, lonlat = false, db = nil)
+    return [user_geo] if user_geo.is_a?(GeoItem)
+    geo_objects = []
+
+    if user_geo.is_a?(File)
+      file_type = File.extname(user_geo)
+      if ['.csv', '.tsv', '.tdv', '.txt', '.geojson', '.json'].include?(file_type)
+        # parse this as if it were sent as a string
+        user_geo = user_geo.read
+      else
+        # convert this with ogr2ogr and parse as a string
+        begin
+          `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
+          user_geo = File.open('tmp.geojson').read
+        rescue
+          raise 'gdal was not installed, or format was not accepted by ogr2ogr'
+        end
+      end
+    end
+
+    if user_geo.is_a?(String)
+      begin
+        user_geo = JSON.parse(user_geo)
+      rescue
+        # not JSON - attempt CSV
+        begin
+          CSV.parse(user_geo.gsub('\"', '""'), headers: true) do |row|
+            geo_objects += standardize_geo(row, db: db)
+          end
+          return geo_objects
+        rescue
+          # not JSON or CSV - attempt mapplz parse
+          return code(user_geo)
+        end
+      end
+    end
+
+    if user_geo.is_a?(Array) && user_geo.length > 0
+      if user_geo[0].is_a?(Array) && user_geo[0].length > 0
+        if user_geo[0][0].is_a?(Array) || (user_geo[0][0].is_a?(Hash) && user_geo[0][0].key?(:lat) && user_geo[0][0].key?(:lng))
+          # lines and shapes
+          user_geo.map! do |path|
+            path_pts = []
+            path.each do |path_pt|
+              if lonlat
+                lat = path_pt[1] || path_pt[:lat]
+                lng = path_pt[0] || path_pt[:lng]
+              else
+                lat = path_pt[0] || path_pt[:lat]
+                lng = path_pt[1] || path_pt[:lng]
+              end
+              path_pts << [lat, lng]
+            end
+
+            # polygon border repeats first point
+            if path_pts[0] == path_pts.last
+              geo_type = 'polygon'
+            else
+              geo_type = 'polyline'
+            end
+
+            geoitem = GeoItem.new(db)
+            geoitem[:path] = path_pts
+            geoitem[:type] = geo_type
+            geoitem
+          end
+          return user_geo
+        end
+      end
+
+      # multiple objects being added? iterate through
+      if user_geo[0].is_a?(Hash) || user_geo[0].is_a?(Array)
+        user_geo.each do |geo_piece|
+          geo_objects += standardize_geo(geo_piece, db: db)
+        end
+        return geo_objects
+      end
+
+      # first two spots are a coordinate
+      validate_lat = user_geo[0].to_f != 0 || user_geo[0].to_s == '0'
+      validate_lng = user_geo[1].to_f != 0 || user_geo[1].to_s == '0'
+
+      if validate_lat && validate_lng
+        geo_object = GeoItem.new(db)
+        geo_object[:type] = 'point'
+
+        if lonlat
+          geo_object[:lat] = user_geo[1].to_f
+          geo_object[:lng] = user_geo[0].to_f
+        else
+          geo_object[:lat] = user_geo[0].to_f
+          geo_object[:lng] = user_geo[1].to_f
+        end
+      else
+        fail 'no latitude or longitude found'
+      end
+
+      # assume user properties are an ordered array of values known to the user
+      user_properties = user_geo.drop(2)
+
+      # only one property and it's a hash? it's a hash of properties
+      if user_properties.length == 1 && user_properties[0].is_a?(Hash)
+        user_properties[0].keys.each do |key|
+          geo_object[key.to_sym] = user_properties[0][key]
+        end
+      else
+        geo_object[:properties] = user_properties
+      end
+
+      geo_objects << geo_object
+
+    elsif user_geo.is_a?(Hash) || user_geo.is_a?(CSV::Row)
+      if user_geo.is_a?(CSV::Row)
+        # convert CSV::Row to geo hash
+        geo_hash = {}
+        user_geo.headers.each do |header|
+          geo_hash[header] = user_geo[header]
+        end
+        user_geo = geo_hash
+      end
+
+      # check for lat and lng
+      validate_lat = false
+      validate_lat = 'lat' if user_geo.key?('lat') || user_geo.key?(:lat)
+      validate_lat ||= 'latitude' if user_geo.key?('latitude') || user_geo.key?(:latitude)
+
+      validate_lng = false
+      validate_lng = 'lng' if user_geo.key?('lng') || user_geo.key?(:lng)
+      validate_lng ||= 'lon' if user_geo.key?('lon') || user_geo.key?(:lon)
+      validate_lng ||= 'long' if user_geo.key?('long') || user_geo.key?(:long)
+      validate_lng ||= 'longitude' if user_geo.key?('longitude') || user_geo.key?(:longitude)
+
+      if validate_lat && validate_lng
+        # single hash
+        geo_object = GeoItem.new(db)
+        geo_object[:lat] = user_geo[validate_lat].to_f
+        geo_object[:lng] = user_geo[validate_lng].to_f
+        geo_object[:type] = 'point'
+
+        user_geo.keys.each do |key|
+          next if key == validate_lat || key == validate_lng
+          geo_object[key.to_sym] = user_geo[key]
+        end
+        geo_objects << geo_object
+      elsif user_geo.key?('path') || user_geo.key?(:path)
+        # try line or polygon
+        path_pts = []
+        path = user_geo['path'] if user_geo.key?('path')
+        path = user_geo[:path] if user_geo.key?(:path)
+        path.each do |path_pt|
+          if lonlat
+            lat = path_pt[1] || path_pt[:lat]
+            lng = path_pt[0] || path_pt[:lng]
+          else
+            lat = path_pt[0] || path_pt[:lat]
+            lng = path_pt[1] || path_pt[:lng]
+          end
+          path_pts << [lat, lng]
+        end
+
+        # polygon border repeats first point
+        if path_pts[0] == path_pts.last
+          geo_type = 'polygon'
+        else
+          geo_type = 'polyline'
+        end
+
+        geoitem = GeoItem.new(db)
+        geoitem[:path] = path_pts
+        geoitem[:type] = geo_type
+
+        property_list = user_geo.clone
+        property_list = property_list[:properties] if property_list.key?(:properties)
+        property_list = property_list['properties'] if property_list.key?('properties')
+        property_list.delete(:path)
+        property_list.keys.each do |prop|
+          geoitem[prop.to_sym] = property_list[prop]
+        end
+
+        geo_objects << geoitem
+      elsif user_geo.key?('geo') || user_geo.key?(:geo)
+        # this key is GeoJSON or WKT
+        geotext = (user_geo['geo'] || user_geo[:geo])
+        if geotext.upcase.index('POINT(') || geotext.upcase.index('LINESTRING(') || geotext.upcase.index('POLYGON(')
+          # try WKT
+          geoitem = GeoItem.new(db)
+          geoitem = parse_wkt(geoitem, geotext)
+        else
+          # GeoJSON
+          begin
+            geoitem = standardize_geo(JSON.parse(geotext), db: db)[0]
+          rescue
+            # did not recognize format
+            raise 'did not recognize format in CSV geo column'
+          end
+        end
+        user_geo.keys.each do |key|
+          next if ['lat', 'lng', 'geo', 'geom', 'geojson', 'wkt', :lat, :lng, :geo, :geom, :geojson, :wkt].include?(key)
+          geoitem[key.to_sym] = user_geo[key]
+        end
+        geo_objects << geoitem
+      else
+        # try GeoJSON
+        if user_geo.key?(:type)
+          user_geo['type'] = user_geo[:type] || ''
+          user_geo['features'] = user_geo[:features] if user_geo.key?(:features)
+          user_geo['properties'] = user_geo[:properties] || {}
+          if user_geo.key?(:geometry)
+            user_geo['geometry'] = user_geo[:geometry]
+            user_geo['geometry']['type'] = user_geo[:geometry][:type]
+            user_geo['geometry']['coordinates'] = user_geo[:geometry][:coordinates]
+          end
+        end
+        if user_geo.key?('type')
+          if user_geo['type'] == 'FeatureCollection' && user_geo.key?('features')
+            # recursive onto features
+            user_geo['features'].each do |feature|
+              geo_objects += standardize_geo(feature, db: db)
+            end
+          elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
+            # each feature
+            coordinates = user_geo['geometry']['coordinates']
+
+            if user_geo['geometry']['type'] == 'Point'
+              geo_object = GeoItem.new(db)
+              geo_object[:lat] = coordinates[1].to_f
+              geo_object[:lng] = coordinates[0].to_f
+              geo_object[:type] = 'point'
+              geo_objects << geo_object
+            elsif user_geo['geometry']['type'] == 'LineString'
+              geo_object = GeoItem.new(db)
+              MapPLZ.flip_path(coordinates)
+              geo_object[:path] = coordinates
+              geo_object[:type] = 'polyline'
+              geo_objects << geo_object
+            elsif user_geo['geometry']['type'] == 'Polygon'
+              geo_object = GeoItem.new(db)
+              coordinates.map! do |ring|
+                MapPLZ.flip_path(ring)
+              end
+              geo_object[:path] = coordinates
+              geo_object[:type] = 'polygon'
+              geo_objects << geo_object
+            elsif user_geo['geometry']['type'] == 'MultiPoint'
+              coordinates.each do |point|
+                geo_object = GeoItem.new(db)
+                geo_object[:lat] = point[1].to_f
+                geo_object[:lng] = point[0].to_f
+                geo_object[:type] = 'point'
+                geo_objects << geo_object
+              end
+            elsif user_geo['geometry']['type'] == 'MultiLineString'
+              coordinates.each do |line|
+                geo_object = GeoItem.new(db)
+                geo_object[:path] = MapPLZ.flip_path(line)
+                geo_object[:type] = 'polyline'
+                geo_objects << geo_object
+              end
+            elsif user_geo['geometry']['type'] == 'MultiPolygon'
+              coordinates.each do |poly|
+                geo_object = GeoItem.new(db)
+                poly.map! do |ring|
+                  MapPLZ.flip_path(ring)
+                end
+                geo_object[:path] = poly
+                geo_object[:type] = 'polygon'
+                geo_objects << geo_object
+              end
+            end
+
+            # store properties on all generated geometries
+            prop_keys = {}
+            if user_geo.key?('properties')
+              user_geo['properties'].keys.each do |key|
+                prop_keys[key.to_sym] = user_geo['properties'][key]
+              end
+            end
+            geo_objects.each do |geo|
+              prop_keys.keys.each do |key|
+                geo[key] = prop_keys[key]
+              end
+            end
+          end
+        end
+      end
+    end
+
+    geo_objects
   end
 
   # alias methods
@@ -469,6 +789,36 @@ class MapPLZ
       # verify up-to-date centroid exists
       path_hash = Digest::SHA256.digest(self[:path].to_s)
       (key?(:path) && key?(:centroid) && self[:centroid] == path_hash)
+    end
+
+    def distance_from(user_geo)
+      GeoItem.centroid(self)
+      user_geo = standardize_geo(user_geo)[0]
+      GeoItem.centroid(user_geo)
+
+      Geokdtree::Tree.distance([user_geo[:lat], user_geo[:lng]], [self[:lat], self[:lng]])
+    end
+
+    def inside?(user_geo)
+      GeoItem.centroid(self)
+
+      user_geo = standardize_geo(user_geo)[0] unless user_geo.is_a?(GeoItem)
+      path_pts = user_geo[:path]
+      path_pts = path_pts[0] if user_geo[:type] == 'polygon'
+
+      # point in polygon from http://jakescruggs.blogspot.com/2009/07/point-inside-polygon-in-ruby.html
+      c = false
+      i = -1
+      j = path_pts.size - 1
+      while (i += 1) < path_pts.size
+        if (path_pts[i][0] <= self[:lat] && self[:lat] < path_pts[j][0]) || (path_pts[j][0] <= self[:lat] && self[:lat] < path_pts[i][0])
+          if self[:lng] < (path_pts[j][1] - path_pts[i][1]) * (self[:lat] - path_pts[i][0]) / (path_pts[j][0] - path_pts[i][0]) + path_pts[i][1]
+            c = !c
+          end
+        end
+        j = i
+      end
+      return c
     end
 
     def self.centroid(geo_item)
@@ -616,295 +966,6 @@ class MapPLZ
     end
 
     code_line(index + 1)
-  end
-
-  def standardize_geo(user_geo, lonlat = false)
-    geo_objects = []
-
-    if user_geo.is_a?(File)
-      file_type = File.extname(user_geo)
-      if ['.csv', '.tsv', '.tdv', '.txt', '.geojson', '.json'].include?(file_type)
-        # parse this as if it were sent as a string
-        user_geo = user_geo.read
-      else
-        # convert this with ogr2ogr and parse as a string
-        begin
-          `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
-          user_geo = File.open('tmp.geojson').read
-        rescue
-          raise 'gdal was not installed, or format was not accepted by ogr2ogr'
-        end
-      end
-    end
-
-    if user_geo.is_a?(String)
-      begin
-        user_geo = JSON.parse(user_geo)
-      rescue
-        # not JSON - attempt CSV
-        begin
-          CSV.parse(user_geo.gsub('\"', '""'), headers: true) do |row|
-            geo_objects += standardize_geo(row)
-          end
-          return geo_objects
-        rescue
-          # not JSON or CSV - attempt mapplz parse
-          return code(user_geo)
-        end
-      end
-    end
-
-    if user_geo.is_a?(Array) && user_geo.length > 0
-      if user_geo[0].is_a?(Array) && user_geo[0].length > 0
-        if user_geo[0][0].is_a?(Array) || (user_geo[0][0].is_a?(Hash) && user_geo[0][0].key?(:lat) && user_geo[0][0].key?(:lng))
-          # lines and shapes
-          user_geo.map! do |path|
-            path_pts = []
-            path.each do |path_pt|
-              if lonlat
-                lat = path_pt[1] || path_pt[:lat]
-                lng = path_pt[0] || path_pt[:lng]
-              else
-                lat = path_pt[0] || path_pt[:lat]
-                lng = path_pt[1] || path_pt[:lng]
-              end
-              path_pts << [lat, lng]
-            end
-
-            # polygon border repeats first point
-            if path_pts[0] == path_pts.last
-              geo_type = 'polygon'
-            else
-              geo_type = 'polyline'
-            end
-
-            geoitem = GeoItem.new(@db)
-            geoitem[:path] = path_pts
-            geoitem[:type] = geo_type
-            geoitem
-          end
-          return user_geo
-        end
-      end
-
-      # multiple objects being added? iterate through
-      if user_geo[0].is_a?(Hash) || user_geo[0].is_a?(Array)
-        user_geo.each do |geo_piece|
-          geo_objects += standardize_geo(geo_piece)
-        end
-        return geo_objects
-      end
-
-      # first two spots are a coordinate
-      validate_lat = user_geo[0].to_f != 0 || user_geo[0].to_s == '0'
-      validate_lng = user_geo[1].to_f != 0 || user_geo[1].to_s == '0'
-
-      if validate_lat && validate_lng
-        geo_object = GeoItem.new(@db)
-        geo_object[:type] = 'point'
-
-        if lonlat
-          geo_object[:lat] = user_geo[1].to_f
-          geo_object[:lng] = user_geo[0].to_f
-        else
-          geo_object[:lat] = user_geo[0].to_f
-          geo_object[:lng] = user_geo[1].to_f
-        end
-      else
-        fail 'no latitude or longitude found'
-      end
-
-      # assume user properties are an ordered array of values known to the user
-      user_properties = user_geo.drop(2)
-
-      # only one property and it's a hash? it's a hash of properties
-      if user_properties.length == 1 && user_properties[0].is_a?(Hash)
-        user_properties[0].keys.each do |key|
-          geo_object[key.to_sym] = user_properties[0][key]
-        end
-      else
-        geo_object[:properties] = user_properties
-      end
-
-      geo_objects << geo_object
-
-    elsif user_geo.is_a?(Hash) || user_geo.is_a?(CSV::Row)
-      if user_geo.is_a?(CSV::Row)
-        # convert CSV::Row to geo hash
-        geo_hash = {}
-        user_geo.headers.each do |header|
-          geo_hash[header] = user_geo[header]
-        end
-        user_geo = geo_hash
-      end
-
-      # check for lat and lng
-      validate_lat = false
-      validate_lat = 'lat' if user_geo.key?('lat') || user_geo.key?(:lat)
-      validate_lat ||= 'latitude' if user_geo.key?('latitude') || user_geo.key?(:latitude)
-
-      validate_lng = false
-      validate_lng = 'lng' if user_geo.key?('lng') || user_geo.key?(:lng)
-      validate_lng ||= 'lon' if user_geo.key?('lon') || user_geo.key?(:lon)
-      validate_lng ||= 'long' if user_geo.key?('long') || user_geo.key?(:long)
-      validate_lng ||= 'longitude' if user_geo.key?('longitude') || user_geo.key?(:longitude)
-
-      if validate_lat && validate_lng
-        # single hash
-        geo_object = GeoItem.new(@db)
-        geo_object[:lat] = user_geo[validate_lat].to_f
-        geo_object[:lng] = user_geo[validate_lng].to_f
-        geo_object[:type] = 'point'
-
-        user_geo.keys.each do |key|
-          next if key == validate_lat || key == validate_lng
-          geo_object[key.to_sym] = user_geo[key]
-        end
-        geo_objects << geo_object
-      elsif user_geo.key?('path') || user_geo.key?(:path)
-        # try line or polygon
-        path_pts = []
-        path = user_geo['path'] if user_geo.key?('path')
-        path = user_geo[:path] if user_geo.key?(:path)
-        path.each do |path_pt|
-          if lonlat
-            lat = path_pt[1] || path_pt[:lat]
-            lng = path_pt[0] || path_pt[:lng]
-          else
-            lat = path_pt[0] || path_pt[:lat]
-            lng = path_pt[1] || path_pt[:lng]
-          end
-          path_pts << [lat, lng]
-        end
-
-        # polygon border repeats first point
-        if path_pts[0] == path_pts.last
-          geo_type = 'polygon'
-        else
-          geo_type = 'polyline'
-        end
-
-        geoitem = GeoItem.new(@db)
-        geoitem[:path] = path_pts
-        geoitem[:type] = geo_type
-
-        property_list = user_geo.clone
-        property_list = property_list[:properties] if property_list.key?(:properties)
-        property_list = property_list['properties'] if property_list.key?('properties')
-        property_list.delete(:path)
-        property_list.keys.each do |prop|
-          geoitem[prop.to_sym] = property_list[prop]
-        end
-
-        geo_objects << geoitem
-      elsif user_geo.key?('geo') || user_geo.key?(:geo)
-        # this key is GeoJSON or WKT
-        geotext = (user_geo['geo'] || user_geo[:geo])
-        if geotext.upcase.index('POINT(') || geotext.upcase.index('LINESTRING(') || geotext.upcase.index('POLYGON(')
-          # try WKT
-          geoitem = GeoItem.new(@db)
-          geoitem = parse_wkt(geoitem, geotext)
-        else
-          # GeoJSON
-          begin
-            geoitem = standardize_geo(JSON.parse(geotext))[0]
-          rescue
-            # did not recognize format
-            raise 'did not recognize format in CSV geo column'
-          end
-        end
-        user_geo.keys.each do |key|
-          next if ['lat', 'lng', 'geo', 'geom', 'geojson', 'wkt', :lat, :lng, :geo, :geom, :geojson, :wkt].include?(key)
-          geoitem[key.to_sym] = user_geo[key]
-        end
-        geo_objects << geoitem
-      else
-        # try GeoJSON
-        if user_geo.key?(:type)
-          user_geo['type'] = user_geo[:type] || ''
-          user_geo['features'] = user_geo[:features] if user_geo.key?(:features)
-          user_geo['properties'] = user_geo[:properties] || {}
-          if user_geo.key?(:geometry)
-            user_geo['geometry'] = user_geo[:geometry]
-            user_geo['geometry']['type'] = user_geo[:geometry][:type]
-            user_geo['geometry']['coordinates'] = user_geo[:geometry][:coordinates]
-          end
-        end
-        if user_geo.key?('type')
-          if user_geo['type'] == 'FeatureCollection' && user_geo.key?('features')
-            # recursive onto features
-            user_geo['features'].each do |feature|
-              geo_objects += standardize_geo(feature)
-            end
-          elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
-            # each feature
-            coordinates = user_geo['geometry']['coordinates']
-
-            if user_geo['geometry']['type'] == 'Point'
-              geo_object = GeoItem.new(@db)
-              geo_object[:lat] = coordinates[1].to_f
-              geo_object[:lng] = coordinates[0].to_f
-              geo_object[:type] = 'point'
-              geo_objects << geo_object
-            elsif user_geo['geometry']['type'] == 'LineString'
-              geo_object = GeoItem.new(@db)
-              MapPLZ.flip_path(coordinates)
-              geo_object[:path] = coordinates
-              geo_object[:type] = 'polyline'
-              geo_objects << geo_object
-            elsif user_geo['geometry']['type'] == 'Polygon'
-              geo_object = GeoItem.new(@db)
-              coordinates.map! do |ring|
-                MapPLZ.flip_path(ring)
-              end
-              geo_object[:path] = coordinates
-              geo_object[:type] = 'polygon'
-              geo_objects << geo_object
-            elsif user_geo['geometry']['type'] == 'MultiPoint'
-              coordinates.each do |point|
-                geo_object = GeoItem.new(@db)
-                geo_object[:lat] = point[1].to_f
-                geo_object[:lng] = point[0].to_f
-                geo_object[:type] = 'point'
-                geo_objects << geo_object
-              end
-            elsif user_geo['geometry']['type'] == 'MultiLineString'
-              coordinates.each do |line|
-                geo_object = GeoItem.new(@db)
-                geo_object[:path] = MapPLZ.flip_path(line)
-                geo_object[:type] = 'polyline'
-                geo_objects << geo_object
-              end
-            elsif user_geo['geometry']['type'] == 'MultiPolygon'
-              coordinates.each do |poly|
-                geo_object = GeoItem.new(@db)
-                poly.map! do |ring|
-                  MapPLZ.flip_path(ring)
-                end
-                geo_object[:path] = poly
-                geo_object[:type] = 'polygon'
-                geo_objects << geo_object
-              end
-            end
-
-            # store properties on all generated geometries
-            prop_keys = {}
-            if user_geo.key?('properties')
-              user_geo['properties'].keys.each do |key|
-                prop_keys[key.to_sym] = user_geo['properties'][key]
-              end
-            end
-            geo_objects.each do |geo|
-              prop_keys.keys.each do |key|
-                geo[key] = prop_keys[key]
-              end
-            end
-          end
-        end
-      end
-    end
-
-    geo_objects
   end
 
   def parse_sql(where_clause, add_on = nil)

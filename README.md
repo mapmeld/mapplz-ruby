@@ -113,6 +113,7 @@ mapplz.count('layer = ?', name_of_layer)
 
 # near a point
 mapplz.near([lat, lng])
+mapplz.near([lat, lng], max: 10)
 
 # in an area
 mapplz.inside([point1, point2, point3, point1])

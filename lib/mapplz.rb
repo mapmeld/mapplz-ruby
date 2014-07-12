@@ -342,7 +342,7 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         cursor = @db_client.command
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')::geography) AS poly_within FROM mapplz AS start WHERE poly_within = true")
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label FROM mapplz AS start WHERE ST_Contains(ST_GeomFromText('#{wkt}'), start.geom)")
       elsif @db_type == 'spatialite'
         cursor = @db_client.exec("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
       end

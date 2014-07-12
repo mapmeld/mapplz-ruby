@@ -529,12 +529,12 @@ class MapPLZ
       if ['.csv', '.tsv', '.tdv', '.txt', '.geojson', '.json'].include?(file_type)
         # parse this as if it were sent as a string
         user_geo = user_geo.read
-      elsif ['.shp'].include?(file_type)
+      else
         # convert this with ogr2ogr and parse as a string
         begin
           `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
         rescue
-          raise 'gdal was not installed'
+          raise 'gdal was not installed, or format was not accepted by ogr2ogr'
         end
         user_geo = File.open('tmp.geojson').read
       end

@@ -36,7 +36,11 @@ class MapPLZ
   end
 
   def add(user_geo, lonlat = false)
-    geo_objects = MapPLZ.standardize_geo(user_geo, lonlat: lonlat, db: @db)
+    begin
+      geo_objects = MapPLZ.standardize_geo(user_geo, lonlat, @db)
+    rescue MapPLZException
+      geo_objects = code(user_geo)
+    end
 
     if @db_type == 'array'
       @my_array += geo_objects
@@ -317,7 +321,14 @@ class MapPLZ
 
   def inside(user_geo)
     geo_results = []
+
+    # accept [point1, point2, point3, point1] as a polygon search area
+    if user_geo.is_a?(Array) && user_geo[0].is_a?(Array) && !user_geo[0][0].is_a?(Array)
+      user_geo = [user_geo]
+    end
+
     search_areas = MapPLZ.standardize_geo(user_geo)
+
     search_areas.each do |search_area|
       next unless search_area.key?(:path)
       wkt = search_area.to_wkt
@@ -329,11 +340,11 @@ class MapPLZ
           geo_results << geo_item if geo_item.inside?(search_area)
         end
       elsif @db_type == 'mongodb'
-        @db_client.command
+        cursor = @db_client.command
       elsif @db_type == 'postgis'
-        @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
       elsif @db_type == 'spatialite'
-        @db_client.exec("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
+        cursor = @db_client.exec("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
       end
 
       unless cursor.nil?
@@ -388,12 +399,12 @@ class MapPLZ
         # not JSON - attempt CSV
         begin
           CSV.parse(user_geo.gsub('\"', '""'), headers: true) do |row|
-            geo_objects += standardize_geo(row, db: db)
+            geo_objects += standardize_geo(row, lonlat, db)
           end
           return geo_objects
         rescue
           # not JSON or CSV - attempt mapplz parse
-          return code(user_geo)
+          raise MapPLZException.new('call code() to parse mapplz language')
         end
       end
     end
@@ -434,7 +445,7 @@ class MapPLZ
       # multiple objects being added? iterate through
       if user_geo[0].is_a?(Hash) || user_geo[0].is_a?(Array)
         user_geo.each do |geo_piece|
-          geo_objects += standardize_geo(geo_piece, db: db)
+          geo_objects += standardize_geo(geo_piece, lonlat, db)
         end
         return geo_objects
       end
@@ -551,7 +562,7 @@ class MapPLZ
         else
           # GeoJSON
           begin
-            geoitem = standardize_geo(JSON.parse(geotext), db: db)[0]
+            geoitem = standardize_geo(JSON.parse(geotext), lonlat, db)[0]
           rescue
             # did not recognize format
             raise 'did not recognize format in CSV geo column'
@@ -578,7 +589,7 @@ class MapPLZ
           if user_geo['type'] == 'FeatureCollection' && user_geo.key?('features')
             # recursive onto features
             user_geo['features'].each do |feature|
-              geo_objects += standardize_geo(feature, db: db)
+              geo_objects += standardize_geo(feature, lonlat, db)
             end
           elsif user_geo.key?('geometry') && user_geo['geometry'].key?('coordinates')
             # each feature
@@ -683,9 +694,14 @@ class MapPLZ
 
   private
 
+  # internal error record
+  class MapPLZException < Exception
+  end
+
   # internal map object record
   class GeoItem < Hash
-    def initialize(db = { type: 'array', client: nil })
+    def initialize(db = nil)
+      db = { type: 'array', client: nil } if db.nil?
       @db = db
       @db_type = db[:type]
       @db_client = db[:client]
@@ -793,7 +809,7 @@ class MapPLZ
 
     def distance_from(user_geo)
       GeoItem.centroid(self)
-      user_geo = standardize_geo(user_geo)[0]
+      user_geo = MapPLZ.standardize_geo(user_geo)[0]
       GeoItem.centroid(user_geo)
 
       Geokdtree::Tree.distance([user_geo[:lat], user_geo[:lng]], [self[:lat], self[:lng]])
@@ -802,9 +818,13 @@ class MapPLZ
     def inside?(user_geo)
       GeoItem.centroid(self)
 
-      user_geo = standardize_geo(user_geo)[0] unless user_geo.is_a?(GeoItem)
+      # accept [point1, point2, point3, point1] as a polygon search area
+      if user_geo.is_a?(Array) && user_geo[0].is_a?(Array) && !user_geo[0][0].is_a?(Array)
+        user_geo = [user_geo]
+      end
+
+      user_geo = MapPLZ.standardize_geo(user_geo)[0] unless user_geo.is_a?(GeoItem)
       path_pts = user_geo[:path]
-      path_pts = path_pts[0] if user_geo[:type] == 'polygon'
 
       # point in polygon from http://jakescruggs.blogspot.com/2009/07/point-inside-polygon-in-ruby.html
       c = false
@@ -818,7 +838,7 @@ class MapPLZ
         end
         j = i
       end
-      return c
+      c
     end
 
     def self.centroid(geo_item)

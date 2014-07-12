@@ -67,12 +67,12 @@ describe 'test PostGIS' do
     pt = @mapstore << { lat: 40, lng: -70 }
     @mapstore << { lat: 35, lng: 110 }
 
-    responses = @mapstore.within([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]])
+    responses = @mapstore.inside([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]])
     responses.length.should eq(1)
     responses[0][:lat].should eq(40)
     responses[0][:lng].should eq(-70)
 
-    pt.within?([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]]).should eq(true)
+    pt.inside?([[38, -72], [38, -68], [42, -68], [42, -72], [38, -72]]).should eq(true)
   end
 
   it 'updates a record' do

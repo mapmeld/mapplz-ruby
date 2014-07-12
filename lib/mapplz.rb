@@ -296,21 +296,21 @@ class MapPLZ
     elsif @db_type == 'mongodb'
       cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
     elsif @db_type == 'postgis'
-      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS wkt, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     elsif @db_type == 'spatialite'
-      cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.execute("SELECT id, AsText(geom) AS wkt, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     end
 
     unless cursor.nil?
       cursor.each do |geo_result|
         geo_item = GeoItem.new(@db)
         geo_result.keys.each do |key|
-          next if [:geom].include?(key.to_sym)
+          next if [:geo].include?(key.to_sym)
           geo_item[key.to_sym] = geo_result[key]
         end
 
         if @db_type == 'postgis' || @db_type == 'spatialite'
-          geom = (geo_result['geom'] || geo_result[:geom]).upcase
+          geom = (geo_result['geo'] || geo_result[:geo]).upcase
           geo_item = parse_wkt(geo_item, geom)
         end
         geo_results << geo_item
@@ -342,21 +342,21 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         cursor = @db_client.command
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
       elsif @db_type == 'spatialite'
-        cursor = @db_client.exec("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
+        cursor = @db_client.exec("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
       end
 
       unless cursor.nil?
         cursor.each do |geo_result|
           geo_item = GeoItem.new(@db)
           geo_result.keys.each do |key|
-            next if [:geom].include?(key.to_sym)
+            next if [:geo].include?(key.to_sym)
             geo_item[key.to_sym] = geo_result[key]
           end
 
           if @db_type == 'postgis' || @db_type == 'spatialite'
-            geom = (geo_result['geom'] || geo_result[:geom]).upcase
+            geom = (geo_result['geo'] || geo_result[:geo]).upcase
             geo_item = parse_wkt(geo_item, geom)
           end
           geo_results << geo_item

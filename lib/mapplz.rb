@@ -141,34 +141,13 @@ class MapPLZ
 
         if @db_type == 'postgis' || @db_type == 'spatialite'
           geom = (geo_result['geom'] || geo_result[:geom]).upcase
-          geo_item = parse_wkt(geo_item, geom)
+          geo_item = MapPLZ.parse_wkt(geo_item, geom)
         end
         geo_results << geo_item
       end
     end
 
     geo_results
-  end
-
-  def parse_wkt(geo_item, geom_string)
-    if geom_string.index('POINT')
-      coordinates = geom_string.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
-      geo_item[:lat] = coordinates[1].to_f
-      geo_item[:lng] = coordinates[0].to_f
-    elsif geom_string.index('LINESTRING')
-      line_nodes = geom_string.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(',')
-      geo_item[:path] = line_nodes.map do |pt|
-        pt = pt.split(' ')
-        [pt[1].to_f, pt[0].to_f]
-      end
-    elsif geom_string.index('POLYGON')
-      line_nodes = geom_string.gsub('POLYGON', '').gsub('(', '').gsub(')', '').split(', ')
-      geo_item[:path] = line_nodes.map do |pt|
-        pt = pt.split(' ')
-        [pt[1].to_f, pt[0].to_f]
-      end
-    end
-    geo_item
   end
 
   def code(mapplz_code)
@@ -311,7 +290,7 @@ class MapPLZ
 
         if @db_type == 'postgis' || @db_type == 'spatialite'
           geom = (geo_result['geo'] || geo_result[:geo]).upcase
-          geo_item = parse_wkt(geo_item, geom)
+          geo_item = MapPLZ.parse_wkt(geo_item, geom)
         end
         geo_results << geo_item
       end
@@ -331,9 +310,6 @@ class MapPLZ
 
     search_areas.each do |search_area|
       next unless search_area.key?(:path)
-
-      p search_area[:path]
-
       wkt = search_area.to_wkt
 
       if @db_type == 'array'
@@ -360,7 +336,7 @@ class MapPLZ
 
           if @db_type == 'postgis' || @db_type == 'spatialite'
             geom = (geo_result['geo'] || geo_result[:geo]).upcase
-            geo_item = parse_wkt(geo_item, geom)
+            geo_item = MapPLZ.parse_wkt(geo_item, geom)
           end
           geo_results << geo_item
         end
@@ -373,6 +349,27 @@ class MapPLZ
     path.map! do |pt|
       [pt[1].to_f, pt[0].to_f]
     end
+  end
+
+  def self.parse_wkt(geo_item, geom_string)
+    if geom_string.index('POINT')
+      coordinates = geom_string.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
+      geo_item[:lat] = coordinates[1].to_f
+      geo_item[:lng] = coordinates[0].to_f
+    elsif geom_string.index('LINESTRING')
+      line_nodes = geom_string.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(',')
+      geo_item[:path] = line_nodes.map do |pt|
+        pt = pt.split(' ')
+        [pt[1].to_f, pt[0].to_f]
+      end
+    elsif geom_string.index('POLYGON')
+      line_nodes = geom_string.gsub('POLYGON', '').gsub('(', '').gsub(')', '').split(', ')
+      geo_item[:path] = line_nodes.map do |pt|
+        pt = pt.split(' ')
+        [pt[1].to_f, pt[0].to_f]
+      end
+    end
+    geo_item
   end
 
   def self.standardize_geo(user_geo, lonlat = false, db = nil)
@@ -432,6 +429,7 @@ class MapPLZ
             # polygon border repeats first point
             if path_pts[0] == path_pts.last
               geo_type = 'polygon'
+              path_pts = [path_pts]
             else
               geo_type = 'polyline'
             end
@@ -561,7 +559,7 @@ class MapPLZ
         if geotext.upcase.index('POINT(') || geotext.upcase.index('LINESTRING(') || geotext.upcase.index('POLYGON(')
           # try WKT
           geoitem = GeoItem.new(db)
-          geoitem = parse_wkt(geoitem, geotext)
+          geoitem = MapPLZ.parse_wkt(geoitem, geotext)
         else
           # GeoJSON
           begin

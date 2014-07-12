@@ -110,6 +110,12 @@ mapplz.where('layer = ?', name_of_layer)
 # get a count
 mapplz.count
 mapplz.count('layer = ?', name_of_layer)
+
+# near a point
+mapplz.near([lat, lng])
+
+# in an area
+mapplz.inside([point1, point2, point3, point1])
 ```
 
 Queries are returned as an array of GeoItems, which each can be exported as GeoJSON or WKT
@@ -117,6 +123,21 @@ Queries are returned as an array of GeoItems, which each can be exported as GeoJ
 ```
 my_features = @mapper.where('points > 10')
 collection = { type: 'FeatureCollection', features: my_features.map { |feature| JSON.parse(feature.to_geojson) } }
+```
+
+## Files
+
+MapPLZ can be passed a CSV or GeoJSON file.
+
+```
+@mapstore < File.open('test.csv')
+@mapstore < File.open('test.geojson')
+```
+
+If you have gdal installed, you can import files in most formats parseable by the ```ogr2ogr``` command line tool.
+
+```
+@mapstore < File.open('test.shp')
 ```
 
 ## Databases
@@ -167,15 +188,6 @@ mapstore = MapPLZ.new(db)
 mapstore.choose_db('spatialite')
 ```
 
-### COMING SOON
-
-```
-# near a point
-mapplz.near([lat, lng])
-
-# in an area
-mapplz.inside([point1, point2, point3, point1])
-```
 
 ## Language
 You can make a map super quickly by using the MapPLZ language. A MapPLZ map

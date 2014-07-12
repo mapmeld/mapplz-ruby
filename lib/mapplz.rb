@@ -2,6 +2,7 @@
 
 require 'sql_parser'
 require 'json'
+require 'csv'
 include Leaflet::ViewHelpers
 
 # MapPLZ datastore
@@ -134,29 +135,34 @@ class MapPLZ
 
         if @db_type == 'postgis' || @db_type == 'spatialite'
           geom = (geo_result['geom'] || geo_result[:geom]).upcase
-          if geom.index('POINT')
-            coordinates = geom.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
-            geo_item[:lat] = coordinates[1].to_f
-            geo_item[:lng] = coordinates[0].to_f
-          elsif geom.index('LINESTRING')
-            line_nodes = geom.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(',')
-            geo_item[:path] = line_nodes.map do |pt|
-              pt = pt.split(' ')
-              [pt[1].to_f, pt[0].to_f]
-            end
-          elsif geom.index('POLYGON')
-            line_nodes = geom.gsub('POLYGON', '').gsub('(', '').gsub(')', '').split(', ')
-            geo_item[:path] = line_nodes.map do |pt|
-              pt = pt.split(' ')
-              [pt[1].to_f, pt[0].to_f]
-            end
-          end
+          geo_item = parse_wkt(geo_item, geom)
         end
         geo_results << geo_item
       end
     end
 
     geo_results
+  end
+
+  def parse_wkt(geo_item, geom_string)
+    if geom_string.index('POINT')
+      coordinates = geom_string.gsub('POINT', '').gsub('(', '').gsub(')', '').split(' ')
+      geo_item[:lat] = coordinates[1].to_f
+      geo_item[:lng] = coordinates[0].to_f
+    elsif geom_string.index('LINESTRING')
+      line_nodes = geom_string.gsub('LINESTRING', '').gsub('(', '').gsub(')', '').split(',')
+      geo_item[:path] = line_nodes.map do |pt|
+        pt = pt.split(' ')
+        [pt[1].to_f, pt[0].to_f]
+      end
+    elsif geom_string.index('POLYGON')
+      line_nodes = geom_string.gsub('POLYGON', '').gsub('(', '').gsub(')', '').split(', ')
+      geo_item[:path] = line_nodes.map do |pt|
+        pt = pt.split(' ')
+        [pt[1].to_f, pt[0].to_f]
+      end
+    end
+    geo_item
   end
 
   def code(mapplz_code)
@@ -360,7 +366,7 @@ class MapPLZ
       if key?(:properties)
         property_list = { properties: self[:properties] }
       else
-        property_list = self.clone
+        property_list = clone
         property_list.delete(:lat)
         property_list.delete(:lng)
         property_list.delete(:path)
@@ -518,12 +524,36 @@ class MapPLZ
   def standardize_geo(user_geo, lonlat = false)
     geo_objects = []
 
+    if user_geo.is_a?(File)
+      file_type = File.extname(user_geo)
+      if ['.csv', '.tsv', '.tdv', '.txt', '.geojson', '.json'].include?(file_type)
+        # parse this as if it were sent as a string
+        user_geo = user_geo.read
+      elsif ['.shp'].include?(file_type)
+        # convert this with ogr2ogr and parse as a string
+        begin
+          `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
+        rescue
+          raise 'gdal was not installed'
+        end
+        user_geo = File.open('tmp.geojson').read
+      end
+    end
+
     if user_geo.is_a?(String)
       begin
         user_geo = JSON.parse(user_geo)
       rescue
-        # not JSON string - attempt mapplz parse
-        return code(user_geo)
+        # not JSON - attempt CSV
+        begin
+          CSV.parse(user_geo.gsub('\"', '""'), headers: true) do |row|
+            geo_objects += standardize_geo(row)
+          end
+          return geo_objects
+        rescue
+          # not JSON or CSV - attempt mapplz parse
+          return code(user_geo)
+        end
       end
     end
 
@@ -601,7 +631,16 @@ class MapPLZ
 
       geo_objects << geo_object
 
-    elsif user_geo.is_a?(Hash)
+    elsif user_geo.is_a?(Hash) || user_geo.is_a?(CSV::Row)
+      if user_geo.is_a?(CSV::Row)
+        # convert CSV::Row to geo hash
+        geo_hash = {}
+        user_geo.headers.each do |header|
+          geo_hash[header] = user_geo[header]
+        end
+        user_geo = geo_hash
+      end
+
       # check for lat and lng
       validate_lat = false
       validate_lat = 'lat' if user_geo.key?('lat') || user_geo.key?(:lat)
@@ -660,6 +699,27 @@ class MapPLZ
           geoitem[prop.to_sym] = property_list[prop]
         end
 
+        geo_objects << geoitem
+      elsif user_geo.key?('geo') || user_geo.key?(:geo)
+        # this key is GeoJSON or WKT
+        geotext = (user_geo['geo'] || user_geo[:geo])
+        if geotext.upcase.index('POINT(') || geotext.upcase.index('LINESTRING(') || geotext.upcase.index('POLYGON(')
+          # try WKT
+          geoitem = GeoItem.new(@db)
+          geoitem = parse_wkt(geoitem, geotext)
+        else
+          # GeoJSON
+          begin
+            geoitem = standardize_geo(JSON.parse(geotext))[0]
+          rescue
+            # did not recognize format
+            raise 'did not recognize format in CSV geo column'
+          end
+        end
+        user_geo.keys.each do |key|
+          next if ['lat', 'lng', 'geo', 'geom', 'geojson', 'wkt', :lat, :lng, :geo, :geom, :geojson, :wkt].include?(key)
+          geoitem[key.to_sym] = user_geo[key]
+        end
         geo_objects << geoitem
       else
         # try GeoJSON

@@ -4,6 +4,7 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 
 * What databases should be supported?
 * What languages should be next?
+* File support through ogr2ogr command line tool?
 * What is the real purpose of a MapPLZ API?
 
 # Spatialite
@@ -15,6 +16,7 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 # Rails and ActiveRecord
 
 * Is there a way to seamlessly support ActiveRecord while keeping everything else for plain Ruby?
+* Is there an advantage over rgeo?
 * How does Leaflet-Rails offer its views, and should MapPLZ be more like that?
 
 # PostGIS
@@ -25,6 +27,7 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 # MongoDB
 
 * Store geodata as geodata in MongoDB - but MultiPolygons cannot
+* Load GeoItem results from any MongoDB geometry
 * Geospatial index and queries
 
 # Visualizations

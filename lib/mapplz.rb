@@ -296,7 +296,7 @@ class MapPLZ
     elsif @db_type == 'mongodb'
       cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
     elsif @db_type == 'postgis'
-      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS wkt, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS wkt, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')::geography) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     elsif @db_type == 'spatialite'
       cursor = @db_client.execute("SELECT id, AsText(geom) AS wkt, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start WHERE distance <= #{max} ORDER BY distance LIMIT #{limit}")
     end
@@ -342,7 +342,7 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         cursor = @db_client.command
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')) AS poly_within FROM mapplz AS start WHERE poly_within = true")
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label, ST_Within(start.geom::geography, ST_GeomFromText('#{wkt}')::geography) AS poly_within FROM mapplz AS start WHERE poly_within = true")
       elsif @db_type == 'spatialite'
         cursor = @db_client.exec("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
       end

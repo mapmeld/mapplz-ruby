@@ -3,6 +3,8 @@
 require 'sql_parser'
 require 'json'
 require 'csv'
+require 'geokdtree'
+require 'digest'
 include Leaflet::ViewHelpers
 
 # MapPLZ datastore
@@ -277,9 +279,23 @@ class MapPLZ
     lat = user_geo[0].to_f
     lng = user_geo[1].to_f
     wkt = "POINT(#{lng} #{lat})"
+    geo_results = []
 
     if @db_type == 'array'
-      # 2D geo library?
+      @my_array.sort! do |a, b|
+        GeoItem.centroid(a)
+        a_lat = a[:lat]
+        a_lng = a[:lng]
+        a_distance = Geokdtree::Tree.distance([lat, lng], [a_lat, a_lng])
+
+        GeoItem.centroid(b)
+        b_lat = b[:lat]
+        b_lng = b[:lng]
+        b_distance = Geokdtree::Tree.distance([lat, lng], [b_lat, b_lng])
+
+        a_distance <=> b_distance
+      end
+      geo_results = @my_array.slice(0, limit)
     elsif @db_type == 'mongodb'
       cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
     elsif @db_type == 'postgis'
@@ -289,7 +305,6 @@ class MapPLZ
     end
 
     unless cursor.nil?
-      geo_results = []
       cursor.each do |geo_result|
         geo_item = GeoItem.new
         geo_result.keys.each do |key|
@@ -366,7 +381,7 @@ class MapPLZ
       elsif @db_type == 'postgis' || @db_type == 'spatialite'
         updaters = []
         keys.each do |key|
-          next if [:id, :lat, :lng, :path, :type].include?(key)
+          next if [:id, :lat, :lng, :path, :type, :centroid].include?(key)
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
@@ -420,6 +435,7 @@ class MapPLZ
         property_list.delete(:lng)
         property_list.delete(:path)
         property_list.delete(:type)
+        property_list.delete(:centroid)
       end
 
       output_geo = {
@@ -447,6 +463,38 @@ class MapPLZ
         }
       end
       output_geo.to_json
+    end
+
+    def centroid
+      # verify up-to-date centroid exists
+      path_hash = Digest::SHA256.digest(self[:path].to_s)
+      (key?(:path) && key?(:centroid) && self[:centroid] == path_hash)
+    end
+
+    def self.centroid(geo_item)
+      # generate centroid if possible and not already existing
+      if geo_item.key?(:path) && !geo_item.centroid
+        coordinates = geo_item[:path].clone
+
+        # centroid calculation from https://code.google.com/p/tokland/source/browse/trunk/centroid
+        consecutive_pairs = (coordinates + [coordinates.first]).each_cons(2)
+        area = 0.5 * consecutive_pairs.map do |(x0, y0), (x1, y1)|
+          (x0 * y1) - (x1 * y0)
+        end
+        area.inject(:+)
+
+        consecutive_pairs.map! do |(x0, y0), (x1, y1)|
+          cross = (x0 * y1 - x1 * y0)
+          [(x0 + x1) * cross, (y0 + y1) * cross]
+        end
+        (center_lat, center_lng) = consecutive_pairs.transpose.map do |cs|
+          cs.inject(:+) / (6 * area)
+        end
+
+        geo_item[:centroid] = Digest::SHA256.digest(geo_item[:path].to_s)
+        geo_item[:lat] = center_lat
+        geo_item[:lng] = center_lng
+      end
     end
   end
 

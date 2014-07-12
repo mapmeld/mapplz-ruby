@@ -4,25 +4,24 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 
 * What databases should be supported?
 * What languages should be next?
-* File support through ogr2ogr command line tool?
 * What is the real purpose of a MapPLZ API?
 
 # Spatialite
 
 * Do you use Spatialite? Does it have a following?
-* How can I get Spatialite working with Ruby and without Rgeo+Rails? Got nowhere on Mac. Linux errors on ```SELECT load_extension('data/libspatialite');``` because I'm missing libgeos-3.1.1.so
+* How can I get Spatialite working without Rgeo+Rails? Got nowhere on Mac. Linux errors on ```SELECT load_extension('data/libspatialite');``` because I'm missing libgeos-3.1.1.so
 * How can I get Spatialite working on Travis CI? This helped me write PostGIS but I get permissions errors on Travis.
 
 # Rails and ActiveRecord
 
-* Is there a way to seamlessly support ActiveRecord while keeping everything else for plain Ruby?
-* Is there an advantage over rgeo?
+* Is there a way to seamlessly support ActiveRecord and plain Ruby?
+* Is there an advantage to MapPLZ over rgeo?
 * How does Leaflet-Rails offer its views, and should MapPLZ be more like that?
 
 # PostGIS
 
 * Load GeoItem results from any PostGIS geometry
-* Geospatial index and queries
+* Geospatial index
 
 # MongoDB
 
@@ -31,5 +30,5 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 * Geospatial index and queries
 
 # Visualizations
-
+* Should render_html produce a full page with Leafletjs.com scripts and stylesheets?
 * Instead of a generic HTML/JS, offer color_by(property) ?

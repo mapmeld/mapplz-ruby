@@ -175,6 +175,15 @@ describe 'count and filter objects' do
     @mapstore.count('lat > 3').should eq(0)
     @mapstore.count('lng = 4').should eq(1)
   end
+
+  it 'searches for nearest point' do
+    @mapstore << { lat: 40, lng: -70 }
+    @mapstore << { lat: 35, lng: 110 }
+
+    response = @mapstore.near([30, -60])[0]
+    response[:lat].should eq(40)
+    response[:lng].should eq(-70)
+  end
 end
 
 describe 'save and delete objects' do

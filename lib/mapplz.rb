@@ -261,6 +261,55 @@ class MapPLZ
     render_text + '</script>'
   end
 
+  def near(user_geo, limit = 10, lon_lat = false)
+    limit = limit.to_i
+
+    if user_geo.is_a?(Hash)
+      lat = user_geo[:lat] || user_geo['lat'] || user_geo[:latitude] || user_geo['latitude']
+      lng = user_geo[:lng] || user_geo['lng'] || user_geo[:longitude] || user_geo['longitude']
+      user_geo = [lat.to_f, lng.to_f]
+    elsif user_geo.is_a?(Array)
+      user_geo.reverse! if lon_lat
+    else
+      fail 'must query near a point'
+    end
+
+    lat = user_geo[0].to_f
+    lng = user_geo[1].to_f
+    wkt = "POINT(#{lng}, #{lat})"
+
+    if @db_type == 'array'
+      # 2D geo library?
+    elsif @db_type == 'mongodb'
+      cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
+    elsif @db_type == 'postgis'
+      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_AsText('#{wkt})')::geography) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
+    elsif @db_type == 'spatialite'
+      cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
+    end
+
+    unless cursor.nil?
+      geo_results = []
+      cursor.each do |geo_result|
+        geo_item = GeoItem.new
+        geo_result.keys.each do |key|
+          next if [:geom].include?(key.to_sym)
+          geo_item[key.to_sym] = geo_result[key]
+        end
+
+        if @db_type == 'postgis' || @db_type == 'spatialite'
+          geom = (geo_result['geom'] || geo_result[:geom]).upcase
+          geo_item = parse_wkt(geo_item, geom)
+        end
+        geo_results << geo_item
+      end
+    end
+    geo_results
+  end
+
+  def inside(user_geo)
+  end
+
   def self.flip_path(path)
     path.map! do |pt|
       [pt[1].to_f, pt[0].to_f]

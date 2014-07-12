@@ -54,6 +54,15 @@ describe 'test PostGIS' do
     result[0][:lat].should eq(7)
   end
 
+  it 'searches for nearest point' do
+    @mapstore << { lat: 40, lng: -70 }
+    @mapstore << { lat: 35, lng: 110 }
+
+    response = @mapstore.near([30, -60])[0]
+    response[:lat].should eq(40)
+    response[:lng].should eq(-70)
+  end
+
   it 'updates a record' do
     pt = @mapstore << { lat: 0, lng: 1, label: 'hello' }
     pt[:label] = 'world'

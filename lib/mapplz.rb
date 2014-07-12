@@ -276,7 +276,7 @@ class MapPLZ
 
     lat = user_geo[0].to_f
     lng = user_geo[1].to_f
-    wkt = "POINT(#{lng}, #{lat})"
+    wkt = "POINT(#{lng} #{lat})"
 
     if @db_type == 'array'
       # 2D geo library?

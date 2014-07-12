@@ -283,7 +283,7 @@ class MapPLZ
     elsif @db_type == 'mongodb'
       cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
     elsif @db_type == 'postgis'
-      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_AsText('#{wkt})')::geography) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
+      cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
     elsif @db_type == 'spatialite'
       cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start ORDER BY distance LIMIT #{limit}")
     end
@@ -582,10 +582,10 @@ class MapPLZ
         # convert this with ogr2ogr and parse as a string
         begin
           `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
+          user_geo = File.open('tmp.geojson').read
         rescue
           raise 'gdal was not installed, or format was not accepted by ogr2ogr'
         end
-        user_geo = File.open('tmp.geojson').read
       end
     end
 

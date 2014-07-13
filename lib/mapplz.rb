@@ -105,20 +105,31 @@ class MapPLZ
         end
 
         cursor = @db_client.find(mongo_conditions)
-      elsif @db_type == 'postgis' || @db_type == 'spatialite'
+      elsif @db_type == 'postgis'
+        where_prop = where_clause.strip.split(' ')[0]
+        where_type = add_on
+        if add_on.nil?
+          where_type = where_clause.strip.split(' ')
+          where_type = where_type[where_type.length - 1]
+          where_type = where_type.to_f unless where_type.index("'")
+        end
+        if where_type.is_a?(String)
+          where_clause = where_clause.gsub('?', "'#{add_on}'")
+          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')::text")
+        elsif where_type.is_a?(Integer) || where_type.is_a?(Float)
+          where_clause = where_clause.gsub('?', "#{add_on}")
+          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')::numeric")
+        end
+
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}")
+      elsif @db_type == 'spatialite'
         if add_on.is_a?(String)
           where_clause = where_clause.gsub('?', "'#{add_on}'")
         elsif add_on.is_a?(Integer) || add_on.is_a?(Float)
           where_clause = where_clause.gsub('?', "#{add_on}")
         end
 
-        if @db_type == 'postgis'
-          where_prop = where_clause.strip.split(' ')[0]
-          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')")
-        end
-
-        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
-        cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
+        cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}")
       end
     else
       # query all
@@ -215,7 +226,6 @@ class MapPLZ
       end
 
       flip_coordinates = feature['geometry']['coordinates']
-      p flip_coordinates
       if flip_coordinates[0][0].is_a?(Array)
         flip_coordinates.each do |segment|
           segment.map! { |coord| coord.reverse }

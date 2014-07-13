@@ -3,9 +3,14 @@
 [MapPLZ](http://mapplz.com) is a framework to make mapping quick and easy in
 your favorite language.
 
+<img src="https://raw.githubusercontent.com/mapmeld/mapplz-ruby/master/logo.jpg"/>
+
 ## Getting started
 
-Extract, transform, and load geodata into MapPLZ:
+MapPLZ consumes many many types of geodata. It can process data for a script or dump
+it into a database.
+
+Here's how you can add some data:
 
 ```
 mapstore = MapPLZ.new
@@ -17,7 +22,7 @@ mapstore.add( [lat, lng] )
 # multiple points
 mapstore << [point1, point2]
 
-# a line or shape
+# a line or polygon
 mapstore << [[point1, point2, point3]]
 mapstore << [[point1, point2, point3, point1]]
 mapstore << { path: [point1, point2], label: 'hello world' }
@@ -41,9 +46,22 @@ mapstore << [lat, lng, { color: 'red', cost: 10 }]
 mapstore << { type: "Feature", geometry: { type: "Point", properties: { name: "Bella" }, coordinates: [lng, lat] } }
 ```
 
+MapPLZ can read GeoJSON files and some CSVs.
+
+```
+@mapstore < File.open('test.csv')
+@mapstore < File.open('test.geojson')
+```
+
+If you have gdal installed, you can import files in formats parseable by the ```ogr2ogr``` command line tool.
+
+```
+@mapstore < File.open('test.shp')
+```
+
 ## Export HTML and GeoJSON
 
-You can output the data anytime as GeoJSON:
+You can output the entire dataset anytime as GeoJSON:
 
 ```
 @mapper = MapPLZ.new
@@ -69,7 +87,7 @@ require 'mapplz'
 @mapper.render_html
 ```
 
-This is based on the Leaflet-Rails plugin. Set Leaflet defaults directly:
+This extends the Leaflet-Rails plugin. Set Leaflet defaults directly:
 
 ```
 Leaflet.tile_layer = 'http://{s}.somedomain.com/blabla/{z}/{x}/{y}.png'
@@ -82,7 +100,7 @@ You can pass options to render_html, including new default styles for lines and 
 @mapper.render_html(max_zoom: 18, fillColor: '#00f')
 ```
 
-You can also add styles to your data as it's entered into the map datastore.
+You can also add styles as you enter data into MapPLZ.
 
 ```
 @mapper << { path: [point1, point2], color: 'red', opacity: 0.8 }
@@ -124,21 +142,6 @@ Queries are returned as an array of GeoItems, which each can be exported as GeoJ
 ```
 my_features = @mapper.where('points > 10')
 collection = { type: 'FeatureCollection', features: my_features.map { |feature| JSON.parse(feature.to_geojson) } }
-```
-
-## Files
-
-MapPLZ can be passed a CSV or GeoJSON file.
-
-```
-@mapstore < File.open('test.csv')
-@mapstore < File.open('test.geojson')
-```
-
-If you have gdal installed, you can import files in most formats parseable by the ```ogr2ogr``` command line tool.
-
-```
-@mapstore < File.open('test.shp')
 ```
 
 ## Databases

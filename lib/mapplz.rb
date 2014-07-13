@@ -859,9 +859,13 @@ class MapPLZ
           geo_item = MapPLZ.standardize_geo(geom, true, @db)[0]
         end
 
-        geo_result.keys.each do |key|
-          next if [:geo].include?(key.to_sym)
-          geo_item[key.to_sym] = geo_result[key]
+        if geo_result.is_a?(Array)
+          geo_item[:properties] = geo_result
+        else
+          geo_result.keys.each do |key|
+            next if [:geo].include?(key.to_sym)
+            geo_item[key.to_sym] = geo_result[key]
+          end
         end
 
         geo_results << geo_item

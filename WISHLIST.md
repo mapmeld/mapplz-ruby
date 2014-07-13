@@ -21,13 +21,11 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 # PostGIS
 
 * Load GeoItem results from any PostGIS geometry
-* Geospatial index
+* Geospatial index needed?
 
 # MongoDB
 
-* Store geodata as geodata in MongoDB - but MultiPolygons cannot
 * Load GeoItem results from any MongoDB geometry
-* Geospatial index and queries
 
 # Visualizations
 * Should render_html produce a full page with Leafletjs.com scripts and stylesheets?

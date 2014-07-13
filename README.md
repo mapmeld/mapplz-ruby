@@ -169,6 +169,7 @@ require 'mongo'
 mongo_client = Mongo::MongoClient.new
 database = mongo_client['mapplz']
 collection = database['geoitems']
+collection.create_index(geo: Mongo::GEO2DSPHERE)
 mapstore = MapPLZ.new(collection)
 mapstore.choose_db('mongodb')
 

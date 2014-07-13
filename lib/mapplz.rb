@@ -46,7 +46,15 @@ class MapPLZ
       @my_array += geo_objects
     elsif @db_type == 'mongodb'
       geo_objects.each do |geo_object|
-        reply = @db_client.insert(geo_object)
+        save_obj = geo_object.clone
+        save_obj.delete(:_id)
+        save_obj.delete(:lat)
+        save_obj.delete(:lng)
+        save_obj.delete(:path)
+        save_obj.delete(:centroid)
+        save_obj.delete(:type)
+        save_obj[:geo] = JSON.parse(geo_object.to_geojson)['geometry']
+        reply = @db_client.insert(save_obj)
         geo_object[:_id] = reply.to_s
       end
     elsif @db_type == 'postgis' || @db_type == 'spatialite'
@@ -70,20 +78,12 @@ class MapPLZ
 
   def count(where_clause = nil, add_on = nil)
     results = query(where_clause, add_on)
-    if @db_type == 'array'
-      results.length
-    elsif @db_type == 'mongodb'
-      if where_clause.present?
-        # @db_client.find().count
-      else
-        @db_client.count
-      end
-    else
-      results.count
-    end
+    results.length
   end
 
   def query(where_clause = nil, add_on = nil)
+    geo_results = []
+
     if where_clause.present?
       if @db_type == 'array'
         geo_results = query_array(where_clause, add_on)
@@ -110,10 +110,8 @@ class MapPLZ
           where_clause = where_clause.gsub('?', "#{add_on}")
         end
 
-        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geom, label FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
-        cursor = @db_client.execute("SELECT id, AsText(geom) AS geom, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
-      else
-        # @my_db.where(where_clause, add_on)
+        cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
+        cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
       end
     else
       # query all
@@ -122,31 +120,15 @@ class MapPLZ
       elsif @db_type == 'mongodb'
         cursor = @db_client.find
       elsif @db_type == 'postgis'
-        cursor = @db_client.exec('SELECT id, ST_AsText(geom) AS geom, label FROM mapplz')
+        cursor = @db_client.exec('SELECT id, ST_AsText(geom) AS geo, label FROM mapplz')
       elsif @db_type == 'spatialite'
-        cursor = @db_client.execute('SELECT id, AsText(geom) AS geom, label FROM mapplz')
+        cursor = @db_client.execute('SELECT id, AsText(geom) AS geo, label FROM mapplz')
       else
         # @my_db.all
       end
     end
 
-    unless cursor.nil?
-      geo_results = []
-      cursor.each do |geo_result|
-        geo_item = GeoItem.new(@db)
-        geo_result.keys.each do |key|
-          next if [:geom].include?(key.to_sym)
-          geo_item[key.to_sym] = geo_result[key]
-        end
-
-        if @db_type == 'postgis' || @db_type == 'spatialite'
-          geom = (geo_result['geom'] || geo_result[:geom]).upcase
-          geo_item = MapPLZ.parse_wkt(geo_item, geom)
-        end
-        geo_results << geo_item
-      end
-    end
-
+    geo_results += read_cursor(cursor)
     geo_results
   end
 
@@ -246,7 +228,7 @@ class MapPLZ
     render_text + '</script>'
   end
 
-  def near(user_geo, limit = 10, max = 40010000, lon_lat = false)
+  def near(user_geo, limit = 10, max = 40_010_000, lon_lat = false)
     max = max.to_f # send max in meters
     limit = limit.to_i
 
@@ -273,28 +255,14 @@ class MapPLZ
       end
       geo_results = @my_array.slice(0, limit)
     elsif @db_type == 'mongodb'
-      cursor = @db_client.command(geoNear: 'geom', near: [lat, lng], num: limit)
+      cursor = @db_client.find(geo: { '$nearSphere' => { '$geometry' => { type: 'Point', coordinates: [lng, lat] }, '$maxDistance' => max } })
     elsif @db_type == 'postgis'
       cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label, ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')::geography) AS distance FROM mapplz AS start WHERE ST_Distance(start.geom::geography, ST_GeomFromText('#{wkt}')::geography) <= #{max} ORDER BY distance LIMIT #{limit}")
     elsif @db_type == 'spatialite'
       cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label, Distance(start.geom, AsText('#{wkt}')) AS distance FROM mapplz AS start WHERE Distance(start.geom, AsText('#{wkt}')) <= #{max} ORDER BY distance LIMIT #{limit}")
     end
 
-    unless cursor.nil?
-      cursor.each do |geo_result|
-        geo_item = GeoItem.new(@db)
-        geo_result.keys.each do |key|
-          next if [:geo].include?(key.to_sym)
-          geo_item[key.to_sym] = geo_result[key]
-        end
-
-        if @db_type == 'postgis' || @db_type == 'spatialite'
-          geom = (geo_result['geo'] || geo_result[:geo]).upcase
-          geo_item = MapPLZ.parse_wkt(geo_item, geom)
-        end
-        geo_results << geo_item
-      end
-    end
+    geo_results += read_cursor(cursor)
     geo_results
   end
 
@@ -319,28 +287,15 @@ class MapPLZ
           geo_results << geo_item if geo_item.inside?(search_area)
         end
       elsif @db_type == 'mongodb'
-        cursor = @db_client.command
+        polygon_gj = JSON.parse(search_area.to_geojson)['geometry']
+        cursor = @db_client.find(geo: { '$geoWithin' => { '$geometry' => polygon_gj } })
       elsif @db_type == 'postgis'
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, label FROM mapplz AS start WHERE ST_Contains(ST_GeomFromText('#{wkt}'), start.geom)")
       elsif @db_type == 'spatialite'
         cursor = @db_client.exec("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE MBRContains(FromText('#{wkt}'), FromText(geom))")
       end
 
-      unless cursor.nil?
-        cursor.each do |geo_result|
-          geo_item = GeoItem.new(@db)
-          geo_result.keys.each do |key|
-            next if [:geo].include?(key.to_sym)
-            geo_item[key.to_sym] = geo_result[key]
-          end
-
-          if @db_type == 'postgis' || @db_type == 'spatialite'
-            geom = (geo_result['geo'] || geo_result[:geo]).upcase
-            geo_item = MapPLZ.parse_wkt(geo_item, geom)
-          end
-          geo_results << geo_item
-        end
-      end
+      geo_results += read_cursor(cursor)
     end
     geo_results
   end
@@ -404,7 +359,7 @@ class MapPLZ
           return geo_objects
         rescue
           # not JSON or CSV - attempt mapplz parse
-          raise MapPLZException.new('call code() to parse mapplz language')
+          raise MapPLZException, 'call code() to parse mapplz language'
         end
       end
     end
@@ -711,10 +666,15 @@ class MapPLZ
     def save!
       # update record in database
       if @db_type == 'mongodb'
-        consistent_id = self[:_id]
-        delete(:_id)
-        @db[:client].update({ _id: BSON::ObjectId(consistent_id) }, self)
-        self[:_id] = consistent_id
+        save_obj = clone
+        save_obj.delete(:_id)
+        save_obj.delete(:lat)
+        save_obj.delete(:lng)
+        save_obj.delete(:path)
+        save_obj.delete(:centroid)
+        save_obj.delete(:type)
+        save_obj[:geo] = JSON.parse(to_geojson)['geometry']
+        @db[:client].update({ _id: BSON::ObjectId(self[:_id]) }, save_obj)
       elsif @db_type == 'postgis' || @db_type == 'spatialite'
         updaters = []
         keys.each do |key|
@@ -794,9 +754,13 @@ class MapPLZ
         }
       elsif self[:type] == 'polygon'
         # polygon
+        rings = self[:path].clone
+        rings.map! do |ring|
+          MapPLZ.flip_path(ring)
+        end
         output_geo[:geometry] = {
           type: 'Polygon',
-          coordinates: [MapPLZ.flip_path(self[:path])]
+          coordinates: rings
         }
       end
       output_geo.to_json
@@ -867,6 +831,32 @@ class MapPLZ
         geo_item[:lat] = center_lat
         geo_item[:lng] = center_lng
       end
+    end
+  end
+
+  def read_cursor(cursor)
+    if cursor.nil?
+      []
+    else
+      geo_results = []
+      cursor.each do |geo_result|
+        if @db_type == 'postgis' || @db_type == 'spatialite'
+          geo_item = GeoItem.new(@db)
+          geom = (geo_result['geo'] || geo_result[:geo]).upcase
+          geo_item = MapPLZ.parse_wkt(geo_item, geom)
+        elsif @db_type == 'mongodb'
+          geom = { 'type' => 'Feature', 'geometry' => geo_result['geo'] }
+          geo_item = MapPLZ.standardize_geo(geom, true, @db)[0]
+        end
+
+        geo_result.keys.each do |key|
+          next if [:geo].include?(key.to_sym)
+          geo_item[key.to_sym] = geo_result[key]
+        end
+
+        geo_results << geo_item
+      end
+      geo_results
     end
   end
 

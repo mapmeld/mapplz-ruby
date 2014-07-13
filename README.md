@@ -3,7 +3,7 @@
 [MapPLZ](http://mapplz.com) is a framework to make mapping quick and easy in
 your favorite language.
 
-<img src="https://raw.githubusercontent.com/mapmeld/mapplz-ruby/master/logo.jpg"/>
+<img src="https://raw.githubusercontent.com/mapmeld/mapplz-ruby/master/logo.jpg" width="140"/>
 
 ## Getting started
 

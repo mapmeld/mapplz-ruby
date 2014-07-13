@@ -35,6 +35,14 @@ describe 'store objects' do
     pt[:b].should eq(2)
   end
 
+  it 'accepts a JSON string of properties' do
+    pt = @mapstore << [1, 2, '{ "a": 1, "b": 2 }']
+    pt[:lat].should eq(1)
+    pt[:lng].should eq(2)
+    pt[:a].should eq(1)
+    pt[:b].should eq(2)
+  end
+
   it 'stores a hash' do
     pt = @mapstore << { lat: 1, lng: 2, a: 3, b: 4 }
     pt[:lat].should eq(1)

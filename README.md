@@ -17,7 +17,8 @@ mapstore = MapPLZ.new
 
 # a point
 mapstore << [lat, lng]
-mapstore.add( [lat, lng] )
+mapstore << { lat: 40, lng: -70 }
+mapstore.add( [lng, lat], lonlat: true )
 
 # multiple points
 mapstore << [point1, point2]
@@ -146,7 +147,8 @@ collection = { type: 'FeatureCollection', features: my_features.map { |feature| 
 
 ## Databases
 
-You can store geodata in SQLite/Spatialite, Postgres/PostGIS, or MongoDB.
+If you want to store geodata in a database, you can use Postgres/PostGIS or MongoDB.
+SQLite/Spatialite support is written but untested.
 
 MapPLZ simplifies geodata management and queries.
 
@@ -157,9 +159,10 @@ mapplz.choose_db('postgis')
 ```
 
 ```
-# working with records
+# updating records
 pt = mapstore << [lat, lng]
-pt.name = "Sears Tower"
+pt[:name] = "Sears Tower"
+pt[:lat] += 1
 pt.save!
 pt.delete_item
 ```
@@ -183,7 +186,7 @@ conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom p
 mapstore = MapPLZ.new(conn)
 mapstore.choose_db('postgis')
 
-# Spatialite
+# Spatialite (written but untested)
 require 'sqlite3'
 db = SQLite3::Database.new('data/mapplz.sqlite')
 db.execute(".load 'libspatialite.so'")

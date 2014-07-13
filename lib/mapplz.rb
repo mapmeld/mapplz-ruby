@@ -433,6 +433,14 @@ class MapPLZ
       # assume user properties are an ordered array of values known to the user
       user_properties = user_geo.drop(2)
 
+      # only one property and it's a string? check for JSON hash
+      if user_properties.length == 1 && user_properties[0].is_a?(String)
+        begin
+          user_properties[0] = JSON.parse(user_properties[0])
+        rescue
+        end
+      end
+
       # only one property and it's a hash? it's a hash of properties
       if user_properties.length == 1 && user_properties[0].is_a?(Hash)
         user_properties[0].keys.each do |key|

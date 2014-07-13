@@ -61,7 +61,7 @@ class MapPLZ
       geo_objects.each do |geo_object|
         geom = geo_object.to_wkt
         if @db_type == 'postgis'
-          geojson_props = JSON.parse(geo_object.to_json)['properties']
+          geojson_props = (JSON.parse(geo_object.to_json)['properties'] || {})
           reply = @db_client.exec("INSERT INTO mapplz (properties, geom) VALUES ('#{geojson_props.to_json}', ST_GeomFromText('#{geom}')) RETURNING id")
         elsif @db_type == 'spatialite'
           reply = @db_client.execute("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', AsText('#{geom}')) RETURNING id")
@@ -110,6 +110,9 @@ class MapPLZ
         elsif add_on.is_a?(Integer) || add_on.is_a?(Float)
           where_clause = where_clause.gsub('?', "#{add_on}")
         end
+
+        # query inside properties JSON in PostGIS
+        where_clause = "properties->'" + where_clause.strip.sub(' ',"'") if @db_type == 'postgis'
 
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
         cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
@@ -676,18 +679,19 @@ class MapPLZ
         save_obj.delete(:type)
         save_obj[:geo] = JSON.parse(to_geojson)['geometry']
         @db[:client].update({ _id: BSON::ObjectId(self[:_id]) }, save_obj)
-      elsif @db_type == 'postgis' || @db_type == 'spatialite'
+      elsif @db_type == 'postgis'
+        geojson_props = (JSON.parse(geo_object.to_json)['properties'] || {})
+        @db_client.exec("UPDATE mapplz SET geom = ST_GeomFromText('#{to_wkt}'), properties = '#{geojson_props.to_json}' WHERE id = #{self[:id]}") if @db_type == 'postgis'
+      elsif @db_type == 'spatialite'
         updaters = []
         keys.each do |key|
           next if [:id, :lat, :lng, :path, :type, :centroid].include?(key)
           updaters << "#{key} = '#{self[key]}'" if self[key].is_a?(String)
           updaters << "#{key} = #{self[key]}" if self[key].is_a?(Integer) || self[key].is_a?(Float)
         end
-        updaters << "geom = ST_GeomFromText('#{to_wkt}')" if @db_type == 'postgis'
-        updaters << "geom = AsText('#{to_wkt}')" if @db_type == 'spatialite'
+        updaters << "geom = AsText('#{to_wkt}')"
         if updaters.length > 0
-          @db_client.exec("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'postgis'
-          @db_client.execute("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}") if @db_type == 'spatialite'
+          @db_client.execute("UPDATE mapplz SET #{updaters.join(', ')} WHERE id = #{self[:id]}")
         end
       end
     end
@@ -846,7 +850,6 @@ class MapPLZ
           geom = (geo_result['geo'] || geo_result[:geo]).upcase
           geo_item = MapPLZ.parse_wkt(geo_item, geom)
           geo_result = JSON.parse(geo_result['properties'])
-          p geo_result
         elsif @db_type == 'spatialite'
           geo_item = GeoItem.new(@db)
           geom = (geo_result['geo'] || geo_result[:geo]).upcase

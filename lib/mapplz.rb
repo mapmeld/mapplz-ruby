@@ -62,6 +62,7 @@ class MapPLZ
         geom = geo_object.to_wkt
         if @db_type == 'postgis'
           geojson_props = (JSON.parse(geo_object.to_geojson)['properties'] || {})
+          p geojson_props
           reply = @db_client.exec("INSERT INTO mapplz (properties, geom) VALUES ('#{geojson_props.to_json}', ST_GeomFromText('#{geom}')) RETURNING id")
         elsif @db_type == 'spatialite'
           reply = @db_client.execute("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', AsText('#{geom}')) RETURNING id")
@@ -112,7 +113,7 @@ class MapPLZ
         end
 
         # query inside properties JSON in PostGIS
-        where_clause = "properties->'" + where_clause.strip.sub(' ',"'") if @db_type == 'postgis'
+        where_clause = "properties->'" + where_clause.strip.sub(' ',"' ") if @db_type == 'postgis'
 
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
         cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
@@ -681,6 +682,7 @@ class MapPLZ
         @db[:client].update({ _id: BSON::ObjectId(self[:_id]) }, save_obj)
       elsif @db_type == 'postgis'
         geojson_props = (JSON.parse(to_geojson)['properties'] || {})
+        p geojson_props
         @db_client.exec("UPDATE mapplz SET geom = ST_GeomFromText('#{to_wkt}'), properties = '#{geojson_props.to_json}' WHERE id = #{self[:id]}") if @db_type == 'postgis'
       elsif @db_type == 'spatialite'
         updaters = []

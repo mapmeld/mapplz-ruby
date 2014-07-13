@@ -6,7 +6,7 @@ require 'pg'
 describe 'test PostGIS' do
   before(:all) do
     @conn = PG.connect(dbname: 'travis_postgis')
-    @conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom public.geometry)')
+    @conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, properties JSON, geom public.geometry)')
   end
 
   before(:each) do
@@ -37,6 +37,14 @@ describe 'test PostGIS' do
     results = @mapstore.where("label = 'hello'")
     results.count.should eq(1)
     results[0][:label].should eq('hello')
+  end
+
+  it 'queries a second property' do
+    @mapstore << { lat: 0, lng: 1, color: 'red' }
+    @mapstore << { lat: 0, lng: 1, color: 'blue' }
+    results = @mapstore.where("color = 'red'")
+    results.count.should eq(1)
+    results[0][:color].should eq('red')
   end
 
   it 'queries line data' do

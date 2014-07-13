@@ -482,22 +482,41 @@ class MapPLZ
         path_pts = []
         path = user_geo['path'] if user_geo.key?('path')
         path = user_geo[:path] if user_geo.key?(:path)
-        path.each do |path_pt|
-          if lonlat
-            lat = path_pt[1] || path_pt[:lat]
-            lng = path_pt[0] || path_pt[:lng]
-          else
-            lat = path_pt[0] || path_pt[:lat]
-            lng = path_pt[1] || path_pt[:lng]
-          end
-          path_pts << [lat, lng]
-        end
 
-        # polygon border repeats first point
-        if path_pts[0] == path_pts.last
-          geo_type = 'polygon'
+        if path_pts[0].is_a?(Array) && path_pts[0][0].is_a?(Array)
+          # ring polygon
+          path.each do |ring|
+            ring.map! do |path_pt|
+              if lonlat
+                lat = path_pt[1] || path_pt[:lat]
+                lng = path_pt[0] || path_pt[:lng]
+              else
+                lat = path_pt[0] || path_pt[:lat]
+                lng = path_pt[1] || path_pt[:lng]
+              end
+              [lat, lng]
+            end
+          end
+          path_pts = path
         else
-          geo_type = 'polyline'
+          path.each do |path_pt|
+            if lonlat
+              lat = path_pt[1] || path_pt[:lat]
+              lng = path_pt[0] || path_pt[:lng]
+            else
+              lat = path_pt[0] || path_pt[:lat]
+              lng = path_pt[1] || path_pt[:lng]
+            end
+            path_pts << [lat, lng]
+          end
+
+          # polygon border repeats first point
+          if path_pts[0] == path_pts.last
+            geo_type = 'polygon'
+            path_pts = [path_pts]
+          else
+            geo_type = 'polyline'
+          end
         end
 
         geoitem = GeoItem.new(db)

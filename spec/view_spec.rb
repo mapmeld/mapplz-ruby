@@ -49,7 +49,7 @@ describe 'MapPLZ views' do
 
   it 'should include styled lines and shapes' do
     @mapstore << { path: [[0, 1], [2, 3]], label: 'hello world' }
-    @mapstore << { path: [[[0, 1], [2, 3], [4, 5], [0, 1]]], fillColor: '#f00' }
+    @mapstore << { path: [[0, 1], [2, 3], [4, 5], [0, 1]], fillColor: '#f00' }
 
     result = @mapstore.render_html
     result.should include('L.polyline([[0.0,1.0],[2.0,3.0]], {"clickable":true}).addTo(map)')

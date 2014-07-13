@@ -144,7 +144,7 @@ describe 'store objects' do
     point2 = [3, 4]
     point3 = [5, 6]
     line = @mapstore << [[point1, point2, point3, point1]]
-    line[:path].should eq([[1, 2], [3, 4], [5, 6], [1, 2]])
+    line[:path].should eq([[[1, 2], [3, 4], [5, 6], [1, 2]]])
     line[:type].should eq('polygon')
   end
 end

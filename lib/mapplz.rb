@@ -112,8 +112,10 @@ class MapPLZ
           where_clause = where_clause.gsub('?', "#{add_on}")
         end
 
-        # query inside properties JSON in PostGIS
-        where_clause = "properties->'" + where_clause.strip.sub(' ',"' ") if @db_type == 'postgis'
+        if @db_type == 'postgis'
+          where_prop = where_clause.strip.split(' ')[0]
+          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')")
+        end
 
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}") if @db_type == 'postgis'
         cursor = @db_client.execute("SELECT id, AsText(geom) AS geo, label FROM mapplz WHERE #{where_clause}") if @db_type == 'spatialite'
@@ -213,6 +215,7 @@ class MapPLZ
       end
 
       flip_coordinates = feature['geometry']['coordinates']
+      p flip_coordinates
       if flip_coordinates[0][0].is_a?(Array)
         flip_coordinates.each do |segment|
           segment.map! { |coord| coord.reverse }
@@ -682,7 +685,6 @@ class MapPLZ
         @db[:client].update({ _id: BSON::ObjectId(self[:_id]) }, save_obj)
       elsif @db_type == 'postgis'
         geojson_props = (JSON.parse(to_geojson)['properties'] || {})
-        p geojson_props
         @db_client.exec("UPDATE mapplz SET geom = ST_GeomFromText('#{to_wkt}'), properties = '#{geojson_props.to_json}' WHERE id = #{self[:id]}") if @db_type == 'postgis'
       elsif @db_type == 'spatialite'
         updaters = []

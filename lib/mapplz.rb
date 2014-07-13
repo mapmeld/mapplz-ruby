@@ -62,7 +62,6 @@ class MapPLZ
         geom = geo_object.to_wkt
         if @db_type == 'postgis'
           geojson_props = (JSON.parse(geo_object.to_geojson)['properties'] || {})
-          p geojson_props
           reply = @db_client.exec("INSERT INTO mapplz (properties, geom) VALUES ('#{geojson_props.to_json}', ST_GeomFromText('#{geom}')) RETURNING id")
         elsif @db_type == 'spatialite'
           reply = @db_client.execute("INSERT INTO mapplz (label, geom) VALUES ('#{geo_object[:label] || ''}', AsText('#{geom}')) RETURNING id")
@@ -107,19 +106,7 @@ class MapPLZ
         cursor = @db_client.find(mongo_conditions)
       elsif @db_type == 'postgis'
         where_prop = where_clause.strip.split(' ')[0]
-        where_type = add_on
-        if add_on.nil?
-          where_type = where_clause.strip.split(' ')
-          where_type = where_type[where_type.length - 1]
-          where_type = where_type.to_f unless where_type.index("'")
-        end
-        if where_type.is_a?(String)
-          where_clause = where_clause.gsub('?', "'#{add_on}'")
-          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')::text")
-        elsif where_type.is_a?(Integer) || where_type.is_a?(Float)
-          where_clause = where_clause.gsub('?', "#{add_on}")
-          where_clause = where_clause.gsub(where_prop, "json_extract_path(properties, '#{where_prop}')::numeric")
-        end
+        where_clause = where_clause.gsub(where_prop, "json_extract_path_text(properties, '#{where_prop}')")
 
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}")
       elsif @db_type == 'spatialite'

@@ -160,7 +160,7 @@ class MapPLZ
 
   def render_html(options = {})
     my_embed = embed_html(options)
-    ```<!DOCTYPE html>
+    `<!DOCTYPE html>
 <html>
   <head>
     <style type="text/css">
@@ -177,7 +177,7 @@ class MapPLZ
   <body>
     #{my_embed}
   </body>
-</html>```
+</html>`
   end
 
   def embed_html(options = {})

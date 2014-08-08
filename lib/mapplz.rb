@@ -160,10 +160,10 @@ class MapPLZ
 
   def render_html(options = {})
     my_embed = embed_html(options)
-    my_embed = """<!DOCTYPE html>
+    my_embed = "<!DOCTYPE html>
 <html>
   <head>
-    <style type="text/css">
+    <style type=\"text/css\">
     html, body, #map {
       width: 100%;
       height: 100%;
@@ -171,13 +171,13 @@ class MapPLZ
       padding: 0;
     }
     </style>
-    <script type="text/javascript" src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
-    <link href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" rel="stylesheet" type="text/css"/>
+    <script type=\"text/javascript\" src=\"http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js\"></script>
+    <link href=\"http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css\" rel=\"stylesheet\" type=\"text/css\"/>
   </head>
   <body>
     #{my_embed}
   </body>
-</html>"""
+</html>"
     my_embed
   end
 

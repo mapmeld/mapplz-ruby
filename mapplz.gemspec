@@ -3,7 +3,7 @@ $LOAD_PATH.push File.expand_path('../lib', __FILE__)
 
 Gem::Specification.new do |s|
   s.name = 'mapplz'
-  s.version = '0.1.5'
+  s.version = '0.1.6'
   s.platform = Gem::Platform::RUBY
   s.authors = ['Nick Doiron']
   s.email = ['ndoiron@mapmeld.com']
@@ -14,6 +14,13 @@ Gem::Specification.new do |s|
 
   s.files = Dir['lib/**/*'] + Dir['app/**/*'] + ['README.md']
   s.require_paths = ['lib']
+
+  s.add_dependency 'sql_parser'
+  s.add_dependency 'geokdtree'
+  s.add_dependency 'leaflet-rails'
+  s.add_dependency 'sqlite3'
+  s.add_dependency 'pg'
+  s.add_dependency 'mongo'
 
   s.add_development_dependency 'rspec'
   s.add_development_dependency 'rubocop'

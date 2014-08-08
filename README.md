@@ -154,7 +154,6 @@ MapPLZ simplifies geodata management and queries.
 
 ```
 # setting the database
-# if a site uses ActiveRecord, the database will be set automatically
 mapplz.choose_db('postgis')
 ```
 
@@ -180,20 +179,14 @@ mapstore = MapPLZ.new(collection)
 mapstore.choose_db('mongodb')
 
 # PostGIS
+# before you start, install PostGIS and create a table
+# here's my schema:
+# CREATE TABLE mapplz (id SERIAL PRIMARY KEY, properties JSON, geom public.geometry)
+
 require 'pg'
 conn = PG.connect(dbname: 'your_db')
-conn.exec('CREATE TABLE mapplz (id SERIAL PRIMARY KEY, label VARCHAR(30), geom public.geometry)')
 mapstore = MapPLZ.new(conn)
 mapstore.choose_db('postgis')
-
-# Spatialite (written but untested)
-require 'sqlite3'
-db = SQLite3::Database.new('data/mapplz.sqlite')
-db.execute(".load 'libspatialite.so'")
-db.execute('CREATE TABLE mapplz (id INTEGER PRIMARY KEY AUTOINCREMENT, label VARCHAR(30), geom BLOB NOT NULL)')
-db.execute("SELECT CreateSpatialIndex('mapplz', 'geom')")
-mapstore = MapPLZ.new(db)
-mapstore.choose_db('spatialite')
 ```
 
 

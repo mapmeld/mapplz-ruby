@@ -18,14 +18,25 @@ If you can help, contact me @mapmeld or https://github.com/mapmeld/mapplz-ruby/i
 * Is there an advantage to MapPLZ over rgeo?
 * How does Leaflet-Rails offer its views, and should MapPLZ be more like that?
 
+# Files
+
+* Convert shapefile to WGS84?
+* Install gdal on Travis CI?
+
+# Exports
+
+* For export all to GeoJSON, select all from DB
+
 # PostGIS
 
 * Load GeoItem results from any PostGIS geometry
+* Multiple property queries
 * Geospatial index needed?
 
 # MongoDB
 
 * Load GeoItem results from any MongoDB geometry
+* Results returned from near: limited and sorted? In all languages?
 
 # Visualizations
 * Should render_html produce a full page with Leafletjs.com scripts and stylesheets?

@@ -108,7 +108,7 @@ class MapPLZ
 
         conditions = parse_sql(where_clause, add_on = nil)
         conditions.each do |condition|
-          where_prop = condition[:field]
+          where_prop = condition[:field].to_s
           where_clause = where_clause.gsub(where_prop, "json_extract_path_text(properties, '#{where_prop}')")
         end
 
@@ -160,7 +160,7 @@ class MapPLZ
 
   def render_html(options = {})
     my_embed = embed_html(options)
-    `<!DOCTYPE html>
+    my_embed = `<!DOCTYPE html>
 <html>
   <head>
     <style type="text/css">
@@ -178,6 +178,7 @@ class MapPLZ
     #{my_embed}
   </body>
 </html>`
+    my_embed
   end
 
   def embed_html(options = {})

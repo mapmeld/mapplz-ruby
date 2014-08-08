@@ -105,8 +105,12 @@ class MapPLZ
 
         cursor = @db_client.find(mongo_conditions)
       elsif @db_type == 'postgis'
-        where_prop = where_clause.strip.split(' ')[0]
-        where_clause = where_clause.gsub(where_prop, "json_extract_path_text(properties, '#{where_prop}')")
+
+        conditions = parse_sql(where_clause, add_on = nil)
+        conditions.each do |condition|
+          where_prop = condition[:field]
+          where_clause = where_clause.gsub(where_prop, "json_extract_path_text(properties, '#{where_prop}')")
+        end
 
         cursor = @db_client.exec("SELECT id, ST_AsText(geom) AS geo, properties FROM mapplz WHERE #{where_clause}")
       elsif @db_type == 'spatialite'
@@ -155,6 +159,28 @@ class MapPLZ
   end
 
   def render_html(options = {})
+    my_embed = embed_html(options)
+    ```<!DOCTYPE html>
+<html>
+  <head>
+    <style type="text/css">
+    html, body, #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    </style>
+    <script type="text/javascript" src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+    <link href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" rel="stylesheet" type="text/css"/>
+  </head>
+  <body>
+    #{my_embed}
+  </body>
+</html>```
+  end
+
+  def embed_html(options = {})
     # Leaflet options
     options[:tile_layer] ||= Leaflet.tile_layer
     options[:attribution] ||= Leaflet.attribution
@@ -344,7 +370,7 @@ class MapPLZ
       else
         # convert this with ogr2ogr and parse as a string
         begin
-          `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)}`
+          `ogr2ogr -f "GeoJSON" tmp.geojson #{File.path(user_geo)} -t_srs EPSG:4326`
           user_geo = File.open('tmp.geojson').read
         rescue
           raise 'gdal was not installed, or format was not accepted by ogr2ogr'
@@ -673,11 +699,6 @@ class MapPLZ
 
   def length(where_clause = nil, add_on = nil)
     count(where_clause, add_on)
-  end
-
-  # aliases for render_html
-  def embed_html(options = {})
-    render_html(options)
   end
 
   private

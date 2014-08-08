@@ -85,7 +85,8 @@ require 'mapplz'
 
 @mapper = MapPLZ.new
 @mapper << geo_stuff
-@mapper.render_html
+@mapper.embed_html # a map embed snippet
+@mapper.render_html # a full HTML page
 ```
 
 This extends the Leaflet-Rails plugin. Set Leaflet defaults directly:

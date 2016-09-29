@@ -12,7 +12,7 @@ it into a database.
 
 Here's how you can add some data:
 
-```
+```ruby
 mapstore = MapPLZ.new
 
 # a point
@@ -34,7 +34,7 @@ mapstore << { type: "Feature", geometry: { type: "Point", coordinates: [lng, lat
 
 Include properties along with the geo data:
 
-```
+```ruby
 # an array of attributes
 pt1 = mapstore << [lat, lng, color, cost]
 pt2 = mapstore << [lat, lng, color2, cost2]
@@ -56,7 +56,7 @@ MapPLZ can read GeoJSON files and some CSVs.
 
 If you have gdal installed, you can import files in formats parseable by the ```ogr2ogr``` command line tool.
 
-```
+```ruby
 @mapstore < File.open('test.shp')
 ```
 
@@ -64,7 +64,7 @@ If you have gdal installed, you can import files in formats parseable by the ```
 
 You can output the entire dataset anytime as GeoJSON:
 
-```
+```ruby
 @mapper = MapPLZ.new
 @mapper << mapplz_content
 @mapper.to_geojson
@@ -72,7 +72,7 @@ You can output the entire dataset anytime as GeoJSON:
 
 Each mapped item can be exported as GeoJSON or WKT
 
-```
+```ruby
 pt = @mapper << { lat: 40, lng: -70 }
 pt.to_wkt
 pt.to_geojson
@@ -80,7 +80,7 @@ pt.to_geojson
 
 You can add interactive, HTML+JavaScript maps which use Leaflet.js
 
-```
+```ruby
 require 'mapplz'
 
 @mapper = MapPLZ.new
@@ -91,26 +91,26 @@ require 'mapplz'
 
 This extends the Leaflet-Rails plugin. Set Leaflet defaults directly:
 
-```
+```ruby
 Leaflet.tile_layer = 'http://{s}.somedomain.com/blabla/{z}/{x}/{y}.png'
 @mapper.render_html
 ```
 
 You can pass options to render_html, including new default styles for lines and shapes:
 
-```
+```ruby
 @mapper.render_html(max_zoom: 18, fillColor: '#00f')
 ```
 
 You can also add styles as you enter data into MapPLZ.
 
-```
+```ruby
 @mapper << { path: [point1, point2], color: 'red', opacity: 0.8 }
 ```
 
 All of these would appear as clickable map features with popups:
 
-```
+```ruby
 @mapper << [40, -70, 'hello popup']
 @mapper << { lat: 40, lng: -80, label: 'hello popup' }
 @mapper << { path: [point1, point2], color: 'red', label: 'the red line' }
@@ -120,7 +120,7 @@ All of these would appear as clickable map features with popups:
 
 All of these are valid ways to query geodata:
 
-```
+```ruby
 # return all
 mapplz.query
 
@@ -141,7 +141,7 @@ mapplz.inside([point1, point2, point3, point1])
 
 Queries are returned as an array of GeoItems, which each can be exported as GeoJSON or WKT
 
-```
+```ruby
 my_features = @mapper.where('points > 10')
 collection = { type: 'FeatureCollection', features: my_features.map { |feature| JSON.parse(feature.to_geojson) } }
 ```
@@ -153,12 +153,10 @@ SQLite/Spatialite support is written but untested.
 
 MapPLZ simplifies geodata management and queries.
 
-```
+```ruby
 # setting the database
 mapplz.choose_db('postgis')
-```
 
-```
 # updating records
 pt = mapstore << [lat, lng]
 pt[:name] = "Sears Tower"
@@ -169,7 +167,7 @@ pt.delete_item
 
 ### Database Setup
 
-```
+```ruby
 # MongoDB
 require 'mongo'
 mongo_client = Mongo::MongoClient.new
@@ -195,7 +193,7 @@ mapstore.choose_db('postgis')
 You can make a map super quickly by using the MapPLZ language. A MapPLZ map
 can be described using as simply as this:
 
-```
+```ruby
 mymap = """map
   marker
     "The Statue of Liberty"
